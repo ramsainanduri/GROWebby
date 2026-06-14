@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "buildDate": "2026-06-15",
+  "tools": {
+    "gromacs": "2025.4",
+    "gmxapi": "0.4.x",
+    "python": "3.14",
+    "django": "6.0.6",
+    "react": "19.2.7",
+    "vite": "8.0.16",
+    "nodeJs": "22.22.3",
+    "npm": "10.9.8",
+    "molstar": "3.12.0",
+    "cuda": "13.0.0",
+    "ubuntuBase": "24.04 LTS",
+    "docker": "27.x",
+    "lucideReact": "1.18.0"
+  }
+}
