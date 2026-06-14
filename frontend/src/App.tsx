@@ -1368,11 +1368,14 @@ function AboutView() {
           <a href="https://www.gromacs.org/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
             <FlaskConical size={14} /> GROMACS Documentation
           </a>
-          <a href="https://docs.djangoproject.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
-            <ServerCog size={14} /> Django Docs
+          <a href="http://www.mdtutorials.com/gmx/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
+            <ServerCog size={14} /> MD Tutorials
           </a>
-          <a href="https://react.dev/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
-            <Sparkles size={14} /> React Docs
+          <a href="https://tutorials.gromacs.org/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
+            <Sparkles size={14} /> GROMACS Tutorials
+          </a>
+          <a href="https://gromacstutorials.github.io/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium transition hover:border-ocean-400 hover:text-ocean-700 dark:border-slate-700 dark:hover:border-ocean-500 dark:hover:text-ocean-300">
+            <Sparkles size={14} /> GROMACS Tutorials (Github)
           </a>
         </div>
       </section>
