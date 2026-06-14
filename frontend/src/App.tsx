@@ -1295,12 +1295,18 @@ function AboutView() {
 
   const toolRows = versionInfo
     ? [
-        { label: "GROMACS", version: versionInfo.tools.gromacs, icon: FlaskConical, color: "text-ocean-600 dark:text-ocean-400" },
-        { label: "Python", version: versionInfo.tools.python, icon: TerminalSquare, color: "text-emerald-600 dark:text-emerald-400" },
-        { label: "Django", version: versionInfo.tools.django, icon: ServerCog, color: "text-amber-600 dark:text-amber-400" },
-        { label: "React", version: versionInfo.tools.react, icon: Sparkles, color: "text-cyan-600 dark:text-cyan-400" },
-        { label: "Node.js", version: versionInfo.tools.nodeJs, icon: Zap, color: "text-lime-600 dark:text-lime-400" },
-        { label: "Docker", version: versionInfo.tools.docker, icon: Database, color: "text-slate-600 dark:text-slate-300" },
+        { label: "GROMACS",      version: versionInfo.tools.gromacs,     icon: FlaskConical,   color: "text-ocean-600 dark:text-ocean-400" },
+        { label: "gmxapi",       version: versionInfo.tools.gmxapi,      icon: Network,        color: "text-cyan-600 dark:text-cyan-400" },
+        { label: "CUDA",         version: versionInfo.tools.cuda,         icon: Zap,            color: "text-green-600 dark:text-green-400" },
+        { label: "Ubuntu base",  version: versionInfo.tools.ubuntuBase,  icon: ServerCog,      color: "text-orange-600 dark:text-orange-400" },
+        { label: "Python",       version: versionInfo.tools.python,       icon: TerminalSquare, color: "text-emerald-600 dark:text-emerald-400" },
+        { label: "Django",       version: versionInfo.tools.django,       icon: Database,       color: "text-amber-600 dark:text-amber-400" },
+        { label: "React",        version: versionInfo.tools.react,        icon: Sparkles,       color: "text-cyan-600 dark:text-cyan-400" },
+        { label: "Vite",         version: versionInfo.tools.vite,         icon: PlayCircle,     color: "text-purple-600 dark:text-purple-400" },
+        { label: "Node.js",      version: versionInfo.tools.nodeJs,       icon: Activity,       color: "text-lime-600 dark:text-lime-400" },
+        { label: "npm",          version: versionInfo.tools.npm,          icon: Boxes,          color: "text-red-600 dark:text-red-400" },
+        { label: "MolStar",      version: versionInfo.tools.molstar,      icon: FlaskConical,   color: "text-indigo-600 dark:text-indigo-400" },
+        { label: "Docker",       version: versionInfo.tools.docker,       icon: LayoutDashboard,color: "text-blue-600 dark:text-blue-400" },
       ]
     : [];
 
