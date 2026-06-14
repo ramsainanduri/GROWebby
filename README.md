@@ -1,11 +1,3 @@
-# GROWebby
-
-> **A local, Dockerized web interface for running GROMACS molecular dynamics simulations from your browser.**
-
-GROWebby brings a professional web UI to your local GROMACS installation. Instead of writing shell scripts or chasing MDP files across your filesystem, you upload a coordinate file, click through the pipeline stages, launch the simulation, and watch live energy and temperature charts — all from a single browser tab. Each user gets a private, isolated workspace. Admins control who gets access.
-
----
-
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-6.0.6-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![GROMACS](https://img.shields.io/badge/GROMACS-2025.4-0066CC?logoColor=white)](https://www.gromacs.org/)
@@ -21,6 +13,14 @@ GROWebby brings a professional web UI to your local GROMACS installation. Instea
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-4.x-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![Docker](https://img.shields.io/badge/Docker-27.x-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22C55E)](LICENSE)
+
+---
+
+# GROWebby
+
+> **A local, Dockerized web interface for running GROMACS molecular dynamics simulations from your browser.**
+
+GROWebby brings a professional web UI to your local GROMACS installation. Instead of writing shell scripts or chasing MDP files across your filesystem, you upload a coordinate file, click through the pipeline stages, launch the simulation, and watch live energy and temperature charts — all from a single browser tab. Each user gets a private, isolated workspace. Admins control who gets access.
 
 ---
 
