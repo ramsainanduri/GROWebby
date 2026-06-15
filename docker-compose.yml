@@ -48,9 +48,9 @@ services:
   gromacs-cuda-engine:
     image: ramsainanduri/growebby-base-backend-cuda:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
+    platform: linux/amd64
     build:
       context: ./docker/base-backend-cuda
-      platform: linux/amd64
     profiles: ["cuda"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     deploy:
