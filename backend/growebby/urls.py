@@ -50,9 +50,42 @@ def health(_request):
     )
 
 
+def live_versions(_request):
+    import sys
+    import django
+
+    gmx_api_v = "Not installed"
+    try:
+        import gmxapi
+        gmx_api_v = getattr(gmxapi, "__version__", "Unknown")
+    except ImportError:
+        pass
+
+    gmx_v = "Unknown"
+    binary = os.environ.get("GROMACS_BINARY", "").strip() or shutil.which("gmx")
+    if binary:
+        try:
+            res = subprocess.run([binary, "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=5)
+            for line in res.stdout.splitlines():
+                if "GROMACS version:" in line:
+                    gmx_v = line.split("GROMACS version:")[1].strip()
+                    break
+        except Exception:
+            pass
+
+    return JsonResponse({
+        "tools": {
+            "gromacs": gmx_v,
+            "gmxapi": gmx_api_v,
+            "python": sys.version.split(" ")[0],
+            "django": django.get_version(),
+        }
+    })
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health),
+    path("api/health/versions/", live_versions),
     path("api/auth/", include("accounts.urls")),
     path("api/", include("simulations.urls")),
 ]

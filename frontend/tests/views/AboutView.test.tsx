@@ -5,17 +5,33 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 describe("AboutView", () => {
   beforeEach(() => {
     // Mock the global fetch call made in AboutView
-    global.fetch = vi.fn().mockResolvedValue({
-      json: () =>
-        Promise.resolve({
-          version: "1.0.0",
-          buildDate: "2026-06-15",
-          tools: {
-            gromacs: "2026.2",
-            react: "19.2.7",
-            vite: "8.0.16"
-          }
-        })
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url === "/version.json") {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              version: "1.0.0",
+              buildDate: "2026-06-15",
+              tools: {
+                react: "19.2.7",
+                vite: "8.0.16",
+                gmxapi: "0.4.x" // should be overridden
+              }
+            })
+        });
+      }
+      if (url === "/api/health/versions/") {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              tools: {
+                gromacs: "2026.2 (live)",
+                gmxapi: "0.4.3" // live value
+              }
+            })
+        });
+      }
+      return Promise.reject(new Error("not found"));
     });
   });
 
@@ -33,8 +49,10 @@ describe("AboutView", () => {
     });
 
     expect(screen.getByText("GROMACS")).toBeInTheDocument();
-    expect(screen.getByText("2026.2")).toBeInTheDocument();
+    expect(screen.getByText("2026.2 (live)")).toBeInTheDocument();
     expect(screen.getByText("React")).toBeInTheDocument();
+    expect(screen.getByText("19.2.7")).toBeInTheDocument();
+    expect(screen.getByText("0.4.3")).toBeInTheDocument();
     expect(screen.getByText("19.2.7")).toBeInTheDocument();
   });
 });
