@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.2.0]
+## [1.1.0]
 
 ### Added
 - Two-tier Docker image architecture: tool-only base images (pushed to Docker Hub once) plus thin app-layer images (built locally in seconds on every deploy).
@@ -15,8 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker/base-backend-cuda/Dockerfile` — CUDA 12.1.1 + GROMACS 2026.2 GPU + pip deps, no app code.
 - `docker/base-backend-metal/Dockerfile` — Python 3.14 + OpenCL + GROMACS 2026.2 OpenCL + pip deps, no app code.
 - `docker/base-frontend/Dockerfile` — Node 22 + baked-in `node_modules`, no app code.
-- `build-base-images.sh` — helper script to build and optionally push all base images with `--cpu`, `--cuda`, `--metal`, `--frontend`, `--all`, `--push`, and `--tag` flags.
 - `install_forcefields.sh` script to automatically download and install additional GROMACS force fields (`charmm36` variants, `amber03ws`, `amber14sb_OL15`) into the backend container during build.
+- Designed and integrated a scalable SVG vector logo (isometric simulation box) across the application interface and as the native favicon.
+- Added a new backend API endpoint `/api/gromacs-options/` to dynamically expose engine-supported parameters.
+- Rebuilt Admin UI natively in the frontend for managing users without relying on the Django Admin panel.
+- In-app CRUD capabilities to create users, toggle admin privileges, and reset passwords.
+- Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
+- Email notifications triggered upon new registration, admin approval, and simulation completion (success/fail/cancel).
 
 ### Fixed
 - Fixed deployment script `start.sh` where `docker compose pull` could hang indefinitely; now uses a direct `docker pull` with a 60-second timeout.
@@ -28,19 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `frontend/Dockerfile` reduced to `FROM growebby-base-frontend + COPY .`.
 - `docker-compose.yml` now accepts `BACKEND_BASE_IMAGE` build arg to select the correct profile-specific base at compose-up time.
 - `docs/operations.md` updated with full two-tier image documentation and `BACKEND_BASE_IMAGE` configuration reference.
-
-## [1.1.0]
-
-
-### Added
-- Designed and integrated a scalable SVG vector logo (isometric simulation box) across the application interface and as the native favicon.
-- Added a new backend API endpoint `/api/gromacs-options/` to dynamically expose engine-supported parameters.
-- Rebuilt Admin UI natively in the frontend for managing users without relying on the Django Admin panel.
-- In-app CRUD capabilities to create users, toggle admin privileges, and reset passwords.
-- Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
-- Email notifications triggered upon new registration, admin approval, and simulation completion (success/fail/cancel).
-
-### Changed
 - Re-architected CUDA execution environment: downgraded base to CUDA 12.0.1 for broad host driver compatibility.
 - GROMACS configuration menus in the Workflow UI are now dynamically populated from the backend engine instead of using hardcoded lists.
 - Updated documentation with clear guidelines for managing fine-grained group permissions via the standard Django Admin interface.
