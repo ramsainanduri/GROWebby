@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22.22.3-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![MolStar](https://img.shields.io/badge/MolStar-3.12.0-7C3AED)](https://molstar.org/)
-[![CUDA](https://img.shields.io/badge/GPU-CUDA_13.0-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
+[![CUDA](https://img.shields.io/badge/GPU-CUDA_12.0-76B900?logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![Apple Metal](https://img.shields.io/badge/GPU-Apple_Metal_(OpenCL)-000000?logo=apple&logoColor=white)](https://developer.apple.com/metal/)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04_LTS-E95420?logo=ubuntu&logoColor=white)](https://ubuntu.com/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-4.x-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
@@ -75,15 +75,28 @@ The same host directory is mounted in the backend container as `/app/media/works
 
 ## Quick Start
 
-**Requirements:** Docker and Docker Compose.
+### Host Prerequisites
 
-### Linux / macOS
+Before running the installation or startup scripts, make sure the required host dependencies are installed and configured:
+
+* **All Profiles:**
+  * **Docker** (version 27.x or higher) and **Docker Compose** v2 must be installed and running on your host system.
+* **Linux (with NVIDIA GPU acceleration):**
+  * You **must** have NVIDIA graphics drivers installed on the host.
+  * You **must** install and configure the **NVIDIA Container Toolkit** on the host machine to allow Docker to bridge host GPU drivers to the container. See the [Linux NVIDIA GPU](#2-linux-nvidia-gpu-via-cuda) section below for the quick setup commands.
+* **macOS (with Apple Silicon GPU acceleration):**
+  * You **must** have a native macOS GROMACS build installed (e.g. `brew install gromacs`) that supports OpenCL.
+  * You **must** have Python 3.14 (or similar native Python) installed on macOS to run the Django backend server natively outside Docker.
+
+### Running the Application
+
+#### Linux / macOS
 
 ```bash
 git clone -b dev https://github.com/ramsainanduri/GROWebby.git
 cd GROWebby
-./install.sh   # detects the execution engine and writes .env
-./start.sh     # starts all services
+./install.sh   # auto-detects host engine profile and writes .env
+./start.sh     # starts services based on the detected profile
 ```
 
 ### Windows
@@ -101,16 +114,13 @@ Once running, open your browser:
 | **Frontend** | http://localhost:5173 |
 | **Backend API** | http://localhost:8000/api/ |
 
-Create the first admin account after startup:
+The setup scripts automatically create a default admin account on first launch:
 
-```bash
-docker compose exec backend python manage.py ensure_admin \
-  --username admin \
-  --email admin@example.com \
-  --password "change-this-password"
-```
+- **Username:** `admin`
+- **Email:** `admin@growebby.local`
+- **Password:** `admin`
 
-The password must be at least 8 characters. Change admin credentials immediately in any shared environment.
+Please sign in and change the admin password immediately in any shared or production environment.
 
 ---
 
@@ -122,7 +132,7 @@ Full documentation is available in [`docs/`](docs/README.md):
 - [Simulation Workflow Reference](docs/simulation-workflow.md)
 - [Administration and Access Control](docs/administration.md)
 - [Architecture](docs/architecture.md)
-- [Operations and Troubleshooting](docs/operations.md)
+- [Operations and Diagnostics](docs/operations.md)
 - [Contributing](CONTRIBUTING.md)
 
 ### Building Documentation Locally
@@ -237,43 +247,51 @@ Live plots update while `mdrun` is active. GROWebby first publishes lightweight 
 
 ## GPU Acceleration
 
-GROWebby supports real GROMACS execution on CPU Docker engines and native GPU execution where the host can expose the GPU to GROMACS.
+GROWebby supports GROMACS execution on CPU and GPU. Because GROMACS containerisation separates the compute engine from the web backend, different execution profiles require specific host configurations.
 
-| Profile | Command | Best for |
-|---------|---------|----------|
-| `docker-backend-cpu` | `./start.sh` | macOS Apple Silicon without native GROMACS, or any machine with Docker CPU execution |
-| `mac-opencl-native` | `./install.sh && ./start.sh` | Apple Silicon GPU through a native macOS GROMACS OpenCL build |
-| `cuda` | `docker compose --profile cuda up` | Linux + NVIDIA GPU |
+| Profile | Command / Activation | Host Requirements | How it works |
+|---------|-----------------------|-------------------|--------------|
+| **CPU Only** (`docker-backend-cpu`) | `./start.sh` | • Docker and Docker Compose | Runs GROMACS entirely on the CPU inside the backend container. Works on any x86_64 or arm64 machine. |
+| **Apple Silicon GPU** (`mac-opencl-native`) | Run `./install.sh && ./start.sh` (automatic if native OpenCL is detected) | • macOS M-series hardware<br>• Python 3.14 on macOS host<br>• GROMACS built with OpenCL installed on host | Frontend runs in Docker. The Django backend runs natively on macOS and executes host GROMACS to access the Apple GPU via OpenCL. |
+| **Linux NVIDIA GPU** (`cuda`) | Run `docker compose --profile cuda up` (and set `COMPOSE_PROFILES=cuda` in `.env`) | • Linux OS<br>• Host NVIDIA Driver >= 525.60.13<br>• Host [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/) | GROMACS executes inside a specialized CUDA container (`gromacs-cuda-engine`) utilizing the host's physical GPU. |
 
-```bash
-# CPU Docker backend — works everywhere, including macOS Apple Silicon
-./start.sh
+### Host Prerequisites for GPU Profiles
 
-# Apple Silicon GPU — requires native macOS GROMACS with OpenCL support
-./install.sh
-./start.sh
-```
+#### 1. macOS (Apple Silicon GPU via OpenCL)
+Docker Desktop on macOS cannot pass through the Apple GPU to a Linux guest container. Therefore, running GROMACS on the macOS GPU requires running GROMACS and the backend natively on the host:
+1. Install GROMACS on your Mac (e.g. `brew install gromacs`).
+2. Run `gmx --version` and verify it displays:
+   ```text
+   GPU support: OpenCL
+   ```
+3. Run `./install.sh`. It will auto-detect the native OpenCL support and write the `.env` settings to run the backend natively outside Docker.
 
-### Apple Silicon GPU
+#### 2. Linux (NVIDIA GPU via CUDA)
+Docker containers are isolated environments and cannot see your physical graphics card by default. To compile and run GROMACS with CUDA support inside Docker, you must bridge your host's existing NVIDIA drivers into Docker using the **NVIDIA Container Toolkit**:
 
-Apple M-series GPUs are not CUDA devices. GROMACS uses the macOS OpenCL backend for Apple Silicon GPU acceleration. Docker Desktop runs Linux containers and does not expose the Apple GPU as a macOS OpenCL device, so GROWebby runs this profile with:
+1. **Host Drivers:** Install the standard NVIDIA graphics drivers on your Linux host (confirm via `nvidia-smi`).
+2. **NVIDIA Container Toolkit (Host Configuration):**
+   ```bash
+   # Add the package repositories
+   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+     && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+       sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
-- Frontend in Docker
-- Django backend directly on macOS
-- Native `gmx` from the host, usually `/opt/homebrew/bin/gmx`
+   # Install the toolkit
+   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
 
-Run `gmx --version` and confirm:
+   # Register the NVIDIA runtime with Docker
+   sudo nvidia-ctk runtime configure --runtime=docker
 
-```text
-GPU support: OpenCL
-```
-
-If that line is not present, `./install.sh` selects the Docker CPU backend so runs still execute correctly.
-
-### CUDA Engine (`nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04`)
-- **Base image:** Ubuntu 24.04 LTS + CUDA 13.0.0 + cuDNN
-- **GROMACS:** 2026.2 compiled from source with `-DGMX_GPU=CUDA` and OpenMP threading
-- Requires: NVIDIA driver >= 570, [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
+   # Restart Docker to load the changes
+   sudo systemctl restart docker
+   ```
+3. Once the toolkit is configured, you can build and start the CUDA profile:
+   ```bash
+   # Ensure .env has: COMPOSE_PROFILES=cuda
+   bash start.sh
+   ```
 
 ---
 

@@ -68,6 +68,12 @@ else
   docker compose up --build -d
 fi
 
+echo "Waiting for backend to initialize..."
+sleep 5
+if [[ "${GROWEBBY_ENGINE:-}" != "mac-opencl-native" ]]; then
+  docker compose exec backend python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@growebby.local', 'admin') if not User.objects.filter(username='admin').exists() else None" || true
+fi
+
 URL="http://localhost:5173"
 if command -v open >/dev/null 2>&1; then
   open "$URL"

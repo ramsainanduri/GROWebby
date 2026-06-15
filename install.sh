@@ -15,7 +15,7 @@ ENGINE="docker-cpu"
 COMPOSE_PROFILES="cpu"
 EXECUTION_MODE="docker-cpu"
 GROMACS_BINARY=""
-NOTES="CPU Docker engine selected."
+STATUS="CPU Docker engine selected."
 
 if [[ "$OS_NAME" == "Darwin" && "$ARCH_NAME" == "arm64" ]]; then
   if [[ -n "$HOST_GMX" ]] && "$HOST_GMX" --version 2>/dev/null | grep -qi "GPU support:.*OpenCL"; then
@@ -23,24 +23,24 @@ if [[ "$OS_NAME" == "Darwin" && "$ARCH_NAME" == "arm64" ]]; then
     COMPOSE_PROFILES=""
     EXECUTION_MODE="native-opencl"
     GROMACS_BINARY="$HOST_GMX"
-    NOTES="Apple Silicon detected with native GROMACS OpenCL support. GROWebby will run the backend on macOS so GROMACS can use the M-series GPU."
+    STATUS="Apple Silicon detected with native GROMACS OpenCL support. GROWebby will run the backend on macOS so GROMACS can use the M-series GPU."
   else
     ENGINE="docker-backend-cpu"
     COMPOSE_PROFILES=""
     EXECUTION_MODE="backend-gmx-2026.2"
     GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
-    NOTES="Apple Silicon detected, but no native OpenCL-enabled gmx was found. GROWebby will run GROMACS 2026.2 inside Docker with CPU/OpenMP support. Install a native OpenCL GROMACS build to enable the M-series GPU path."
+    STATUS="Apple Silicon detected, but no native OpenCL-enabled gmx was found. GROWebby will run GROMACS 2026.2 inside Docker with CPU/OpenMP support. Install a native OpenCL GROMACS build to enable the M-series GPU path."
   fi
 elif command -v nvidia-smi >/dev/null 2>&1; then
   ENGINE="linux-nvidia-cuda"
   COMPOSE_PROFILES="cuda"
   EXECUTION_MODE="docker-cuda"
-  NOTES="NVIDIA GPU detected. CUDA Docker engine profile selected."
+  STATUS="NVIDIA GPU detected. CUDA Docker engine profile selected."
 elif [[ "$OS_NAME" == "Linux" ]]; then
   ENGINE="linux-cpu"
   COMPOSE_PROFILES="cpu"
   EXECUTION_MODE="docker-cpu"
-  NOTES="Linux host without NVIDIA GPU detection. CPU Docker engine profile selected."
+  STATUS="Linux host without NVIDIA GPU detection. CPU Docker engine profile selected."
 fi
 
 cat > "$ENV_FILE" <<EOF
@@ -60,7 +60,7 @@ GROMACS_EXECUTION_MODE=$EXECUTION_MODE
 GROMACS_BINARY=$GROMACS_BINARY
 GROMACS_WORK_ROOT=/app/media/workspaces
 GROWEBBY_MEDIA_ROOT=$STATE_DIR/media
-NOTES="$NOTES"
+STATUS="$STATUS"
 EOF
 
 echo "GROWebby engine selection"
@@ -75,6 +75,6 @@ elif [[ "$ENGINE" == "docker-backend-cpu" ]]; then
 elif [[ -n "$GROMACS_BINARY" ]]; then
   echo "  Native gmx: $GROMACS_BINARY"
 fi
-echo "  Notes: $NOTES"
+echo "  Status: $STATUS"
 echo
 echo "Wrote $ENV_FILE"

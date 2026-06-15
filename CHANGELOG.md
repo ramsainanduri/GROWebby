@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0]
+
+### Changed
+- Re-architected CUDA execution environment: downgraded base to CUDA 12.0.1 for broad host driver compatibility.
+- Professionalized application documentation and removed informal system logs.
+- Consolidated hardware engine profiling and error recovery for container environments.
+- Restored frontend utility and API abstractions after UI component decoupling.
+- Fixed Tailwind v4 initialization by removing deprecated PostCSS configuration.
+- Updated repository structure to ensure essential source directories are properly tracked.
+
 ## [1.0.0]
+
 
 ### Added
 

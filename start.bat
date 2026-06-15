@@ -20,5 +20,10 @@ if not exist .env (
 )
 
 docker compose up --build -d
+
+echo Waiting for backend to initialize...
+timeout /t 5 /nobreak >nul
+docker compose exec backend python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@growebby.local', 'admin') if not User.objects.filter(username='admin').exists() else None"
+
 start http://localhost:5173
 echo GROWebby is starting at http://localhost:5173

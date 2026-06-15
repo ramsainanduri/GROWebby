@@ -1,260 +1,181 @@
-# Operations and Troubleshooting
+# Operations and System Administration Guide
 
-This document covers startup, health checks, execution engines, and common failures.
+This guide provides instructions for host environment setup, service management, runtime operations, configuration, and diagnostics for the GROWebby application.
 
-## Start
+---
 
-From the project root:
+## 1. System Requirements & Prerequisites
 
+Before executing the setup (`install.sh`) or startup (`start.sh`) scripts, the host machine must satisfy the prerequisites for the selected execution profile.
+
+### 1.1 CPU-Only Profile
+* **Operating System:** Any Linux distribution, macOS, or Windows (via WSL2).
+* **Hardware Architecture:** `x86_64` or `arm64` (Apple Silicon or ARM Linux).
+* **Docker Engine:** Docker Engine 27.x or higher, and Docker Compose v2.
+
+### 1.2 Apple Silicon GPU Profile (`mac-opencl-native`)
+* **Hardware Architecture:** Apple M-series (M1/M2/M3/M4) processor.
+* **GROMACS native installation:** A host GROMACS installation compiled with OpenCL GPU support. Install via Homebrew:
+  ```bash
+  brew install gromacs
+  ```
+  Verify OpenCL support by running `gmx --version` and confirming the output includes:
+  ```text
+  GPU support: OpenCL
+  ```
+* **Python Runtime:** Python 3.14+ installed on the host macOS system (needed to run the Django web server natively).
+
+### 1.3 Linux NVIDIA GPU Profile (`cuda`)
+* **Operating System:** Linux (Ubuntu 22.04 LTS or newer recommended).
+* **GPU Hardware:** NVIDIA Kepler architecture or newer.
+* **NVIDIA Host Driver:** Driver version must support CUDA 12.0 or higher (minimum driver version `525.60.13` or higher; verify via `nvidia-smi`).
+* **NVIDIA Container Toolkit:** Installed on the host system and configured as the default container runtime.
+
+#### Setup Instructions for NVIDIA Container Toolkit (Ubuntu/Debian)
+1. Register the repository signing key and source list:
+   ```bash
+   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+     sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+   ```
+2. Install the package:
+   ```bash
+   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+   ```
+3. Configure the container runtime integration:
+   ```bash
+   sudo nvidia-ctk runtime configure --runtime=docker
+   ```
+4. Restart the Docker daemon to apply the configuration:
+   ```bash
+   sudo systemctl restart docker
+   ```
+
+---
+
+## 2. Service Management
+
+### 2.1 Startup
+To run the full multi-container application stack:
 ```bash
 ./start.sh
 ```
+This script validates your environment, generates a local `.env` configuration file if missing, starts the required services in background mode, and opens the frontend interface in your default web browser.
 
-The script creates `.env` if needed, starts services, and opens the frontend.
-
-## Install or Re-detect Engine
-
-Run:
-
+### 2.2 Profile Detection and Environment Re-initialization
+The detection script scans your host system for GPU drivers and hardware, then writes the optimal configuration variables to the environment files:
 ```bash
 ./install.sh
 ```
+This writes variables to:
+* `.env` (Docker Compose runtime parameters)
+* `.app_state/engine-selection.env` (cached engine metadata)
 
-This writes:
+> [!NOTE]
+> Execute `./install.sh` again if you update host GPU drivers, install a native host GROMACS binary, or change GPU hardware.
 
-```text
-.env
-.app_state/engine-selection.env
+### 2.3 Rebuilding Services
+When pulling new code changes or updating dependencies, force a rebuild of the images:
+```bash
+# Rebuild all active services
+docker compose up --build -d
+
+# Rebuild specific services
+docker compose up --build -d backend frontend
 ```
 
-Re-run it after installing native GROMACS or changing hardware/engine configuration.
+---
 
-## Health Check
+## 3. Operations & Diagnostics
 
-Use:
-
+### 3.1 API Health Monitoring
+You can query the backend health check endpoint to inspect the active execution mode and GPU detection state:
 ```bash
 curl http://127.0.0.1:8000/api/health/
 ```
 
-Example Docker CPU response:
-
-```json
-{
-  "status": "ok",
-  "service": "growebby-backend",
-  "engine": {
-    "selected": "docker-backend-cpu",
-    "executionMode": "backend-gmx-2026.2",
-    "gromacsBinary": "/usr/local/gromacs/bin/gmx",
-    "gpuAvailable": false,
-    "gpuBackend": "none"
-  }
-}
-```
-
-## Verify GROMACS
-
-Docker backend CPU:
+### 3.2 Verifying GROMACS and GPU Integration
+To verify that the active execution engine successfully compiles and uses GROMACS with the expected hardware backends:
 
 ```bash
+# For Docker CPU execution mode:
 docker compose exec backend /usr/local/gromacs/bin/gmx --version
+
+# For Docker CUDA GPU execution mode:
+docker compose exec gromacs-cuda-engine gmx --version
 ```
+Inspect the console output to confirm the GPU support tags match your hardware capabilities (e.g. `GPU support: CUDA` or `GPU support: OpenCL`).
 
-Native macOS GROMACS:
-
-```bash
-gmx --version
-```
-
-For Apple Silicon GPU execution, confirm:
-
-```text
-GPU support: OpenCL
-```
-
-## Logs
-
-Docker service logs:
-
+### 3.3 Log Monitoring
+To follow the standard stdout/stderr logs of the running services:
 ```bash
 docker compose logs -f backend
 docker compose logs -f frontend
 ```
 
-Run events are visible in the Results page and stored in the database through simulation log records. The UI log window is intentionally clean: it shows stage starts, completed commands, status changes, and readable failure summaries.
+Simulation workflow command logs (e.g. full `gmx mdrun` streams) are written to individual files within each run workspace under `logs/` (e.g., `logs/minim-mdrun-171846435.log`). These logs can be downloaded and reviewed via the Results page in the web interface.
 
-Full GROMACS stdout/stderr is captured separately for each command and written into the run workspace under `logs/`. These files are listed in Run Files on the Results page. If a command fails, GROWebby also shows the final verbose error tail in the UI so the problem is visible without opening the full file.
+### 3.4 Physical Directory Structure
+GROWebby uses host mounts to ensure results and coordinate files persist across container restarts.
 
-Simulation plots update while `mdrun` is active. During long runs, GROWebby publishes lightweight live progress points first and replaces them with extracted GROMACS energy data after `.edr` frames become readable.
+* **Host Storage Path:** `<project-root>/.app_state/media/`
+* **Run Workspaces:** `<project-root>/.app_state/media/workspaces/u<user_id>/runs/<workspace-slug>/`
+* **Container Mount Locations:**
+  * Backend: Mounted at `/app/media/`
+  * GROMACS Compute Engines: Mounted at `/work/`
 
-## Physical Results Storage
+### 3.5 Run Cancellation
+Simulation jobs can be safely cancelled from the web interface. When a cancellation request is issued:
+1. The backend reads the active child process PID from `SimulationJob.process_pid`.
+2. It sends a `SIGTERM` signal to that process group.
+3. The database updates the job status to `cancelled`, leaving all generated structures and logs intact in the workspace directory for inspection.
 
-For Docker-based runs, uploads and results are stored on the host at:
+---
 
-```text
-<project-root>/.app_state/media/
-```
+## 4. Configuration Reference
 
-Run workspaces are stored at:
+The application reads configuration parameters from the `.env` file located in the project root.
 
-```text
-<project-root>/.app_state/media/workspaces/<run-workspace-slug>/
-```
+| Environment Variable | Default Value | Description |
+|----------------------|---------------|-------------|
+| `DJANGO_DEBUG` | `0` | Enables Django debug mode (`1` for local code edits, `0` for production). |
+| `GROWEBBY_SERVE_MEDIA` | `1` | Enables Django to serve run artifacts and structures directly to the browser. |
+| `GROWEBBY_ENGINE` | `docker-backend-cpu` | Configures the execution engine tag (`docker-backend-cpu`, `linux-nvidia-cuda`, `mac-opencl-native`). |
+| `GROMACS_EXECUTION_MODE`| `backend-gmx-2026.2` | Reported engine string in dashboard headers. |
+| `GROMACS_BINARY` | `/usr/local/gromacs/bin/gmx` | Absolute file path to the `gmx` executable inside the active runner environment. |
+| `GROWEBBY_ALLOW_VALIDATION_RUNS` | `0` | Set to `1` to run a synthetic demo/test mode without needing a GROMACS installation. |
 
-Docker mounts this directory into the backend container as:
+---
 
-```text
-/app/media
-/app/media/workspaces
-```
+## 5. Diagnostics & Common Failures
 
-The GROMACS engine containers mount the same directory as:
+### 5.1 Docker Daemon Communication Failure
+* **Symptom:** `Cannot connect to the Docker daemon`
+* **Resolution:** Ensure the Docker service is active. Run `sudo systemctl start docker` (on Linux) or launch Docker Desktop (on macOS/Windows).
 
-```text
-/work
-/work/workspaces
-```
+### 5.2 Port Conflicts
+* **Symptom:** Address already in use error on port `5173` or `8000`.
+* **Resolution:** Find the conflicting process using `lsof -i :5173` or `lsof -i :8000` and stop the running service, or configure alternative host ports in `docker-compose.yml`.
 
-For the native macOS OpenCL backend path, the backend uses the same host directory directly.
+### 5.3 NVIDIA Driver and Container Version Mismatch
+* **Symptom:** `unsatisfied condition: cuda>=12.0` during container creation.
+* **Resolution:** 
+  1. Check your host's maximum supported CUDA version by running `nvidia-smi` on the host.
+  2. If your host's driver version is older than `525.60.13` (supporting up to CUDA 11.x), you must either upgrade your host's NVIDIA driver or edit the base image tag in `docker/gromacs/Dockerfile` to match your host GPU capability (e.g. `FROM nvidia/cuda:11.8.0-devel-ubuntu22.04`).
 
-## Cancelling Runs
+### 5.4 GROMACS Command Execution Failures
+* **Symptom:** Job status changes to `FAILED` immediately upon executing a pipeline step.
+* **Resolution:**
+  * **PDB Parsing / Topology Failures:** `pdb2gmx` will fail if your structure has missing hydrogen atoms or nonstandard residues. Check the step log under the workspace directory (`logs/topology-pdb2gmx-*.log`). Enable the `ignh` or `ter` parameters in the configuration dropdown if required.
+  * **Step Sequence Validation:** Ensure you have successfully run all preceding pipeline steps for the upload before running equilibration or production MD.
 
-Use Cancel run on the Results page for queued or running jobs. While a GROMACS command is active, the backend stores the child process PID in the database and sends `SIGTERM` to that process group when cancellation is requested.
-
-Cancellation changes the job status to `cancelled`, clears the stored PID, records a clean event log entry, and leaves any files produced so far in the run workspace for inspection.
-
-## Environment File
-
-Create a local `.env` from the example file:
-
+### 5.5 Verification Testing
+Run unit tests for the Django apps using the local python virtual environment or through Docker:
 ```bash
-cp .env.example .env
-```
+# Running tests inside container:
+docker compose exec backend python manage.py test accounts simulations
 
-Key settings:
-
-```text
-DJANGO_DEBUG=0
-GROWEBBY_SERVE_MEDIA=1
-GROWEBBY_ENGINE=docker-backend-cpu
-GROMACS_EXECUTION_MODE=backend-gmx-2026.2
-GROMACS_BINARY=/usr/local/gromacs/bin/gmx
-GROWEBBY_ALLOW_VALIDATION_RUNS=0
-```
-
-Use `DJANGO_DEBUG=1` only for backend development. `GROWEBBY_SERVE_MEDIA=1` keeps local run artifacts available through the browser while debug mode is off. Keep `GROWEBBY_ALLOW_VALIDATION_RUNS=0` for real GROMACS execution.
-
-## Common Startup Issues
-
-### Docker is not running
-
-Symptom:
-
-```text
-Cannot connect to the Docker daemon
-```
-
-Fix: start Docker Desktop or Docker Engine, then run `./start.sh` again.
-
-### Port already in use
-
-Frontend uses port `5173`. Backend uses port `8000`.
-
-Find the process:
-
-```bash
-lsof -i :5173
-lsof -i :8000
-```
-
-Stop the conflicting process or change the Compose ports.
-
-### Login returns HTML instead of JSON
-
-Symptom:
-
-```text
-Unexpected token '<', "<!DOCTYPE "... is not valid JSON
-```
-
-Usually the frontend is calling the wrong backend URL or the backend is not ready.
-
-Check:
-
-```bash
-curl http://127.0.0.1:8000/api/health/
-```
-
-Then restart:
-
-```bash
-docker compose up -d --build backend frontend
-```
-
-## Common Simulation Issues
-
-### GPU requested but CPU engine active
-
-If `gpuAvailable` is false, GROWebby does not send GPU flags. If a stale request includes GPU, the runner logs the issue and runs on CPU.
-
-Check:
-
-```bash
-curl http://127.0.0.1:8000/api/health/
-```
-
-### Later step cannot run
-
-A step such as NPT or production requires output from previous steps. Complete the previous step first for the same upload, or run the complete pipeline.
-
-### `pdb2gmx` fails
-
-Common causes:
-
-- Unknown residue names.
-- Atom naming mismatch.
-- Missing atoms.
-- Unsupported ligands.
-- Interactive termini choices.
-
-Inspect the run log and the uploaded structure. Ligands and nonstandard residues often need separate parameterization.
-
-### Run finishes too quickly
-
-Check the execution mode in Results.
-
-- `validation-mode`: synthetic validation mode only, not real MD.
-- `backend-gmx-2026.2`: real GROMACS in Docker CPU mode.
-- `native-opencl`: native macOS GROMACS OpenCL mode.
-
-The current default path should be real GROMACS unless `GROWEBBY_ALLOW_VALIDATION_RUNS=1` is explicitly set.
-
-## Rebuild
-
-Rebuild all active services:
-
-```bash
-docker compose up --build -d
-```
-
-Rebuild only backend and frontend:
-
-```bash
-docker compose up --build -d backend frontend
-```
-
-## Test
-
-Backend tests:
-
-```bash
+# Running tests natively:
 ./.venv/bin/python backend/manage.py test accounts simulations
-```
-
-Frontend build:
-
-```bash
-cd frontend
-npm run build
 ```

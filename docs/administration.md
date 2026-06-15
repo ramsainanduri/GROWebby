@@ -12,20 +12,13 @@ GROWebby uses Django session authentication and local user accounts. It is desig
 
 ## Creating the First Admin
 
-Create the first admin from the project root after services are running:
+The startup scripts automatically create a default superuser account on the first launch so you can log in immediately.
 
-```bash
-docker compose exec backend python manage.py ensure_admin \
-  --username admin \
-  --email admin@example.com \
-  --password "change-this-password"
-```
+- **Username:** `admin`
+- **Email:** `admin@growebby.local`
+- **Password:** `admin`
 
-Requirements:
-
-- Password must be at least 8 characters.
-- If the username already exists, the command exits with an error.
-- The command does not overwrite an existing user.
+Please sign in and change the admin password immediately in any shared or production environment.
 
 You can also use Django's interactive command:
 
