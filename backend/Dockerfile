@@ -34,6 +34,7 @@ ENV PATH="/usr/local/gromacs/bin:${PATH}" \
     GMXBIN="/usr/local/gromacs/bin" \
     CMAKE_PREFIX_PATH="/usr/local/gromacs" \
     LD_LIBRARY_PATH="/usr/local/gromacs/lib:${LD_LIBRARY_PATH}" \
+    gmxapi_ROOT="/usr/local/gromacs" \
     GROMACS_BINARY="/usr/local/gromacs/bin/gmx" \
     GROMACS_EXECUTION_MODE="backend-gmx-2026.2"
 
