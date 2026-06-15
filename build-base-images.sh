@@ -36,6 +36,7 @@ BUILD_CPU=false
 BUILD_CUDA=false
 BUILD_METAL=false
 BUILD_FRONTEND=false
+BUILD_ENGINES=false
 BUILD_ALL=true
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --cuda)      BUILD_CUDA=true;   BUILD_ALL=false ;;
     --metal)     BUILD_METAL=true;  BUILD_ALL=false ;;
     --frontend)  BUILD_FRONTEND=true; BUILD_ALL=false ;;
+    --engines)   BUILD_ENGINES=true; BUILD_ALL=false ;;
     --all)       BUILD_ALL=true ;;
     --tag)       TAG="$2"; shift ;;
     --help)
@@ -62,6 +64,7 @@ if $BUILD_ALL; then
   BUILD_CUDA=true
   BUILD_METAL=true
   BUILD_FRONTEND=true
+  BUILD_ENGINES=true
 fi
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -129,13 +132,36 @@ if $BUILD_FRONTEND; then
     "docker/base-frontend"
 fi
 
+# ── GROMACS Engine images (these are already tool-only images) ────────────────
+# Push the pre-built engine images so new deployments can pull instead of build.
+if $BUILD_ENGINES; then
+  if $DO_PUSH; then
+    for engine in gromacs-cuda-engine gromacs-cpu-engine gromacs-metal-engine; do
+      img="${REPO}/growebby-${engine}:${TAG}"
+      if docker image inspect "$img" >/dev/null 2>&1; then
+        echo ""
+        echo "════════════════════════════════════════════════════════════════"
+        echo "  Pushing engine: ${img}"
+        echo "════════════════════════════════════════════════════════════════"
+        docker push "$img"
+      else
+        echo "  ⚠️  ${img} not found locally — build it first with docker compose build ${engine}"
+      fi
+    done
+  else
+    echo ""
+    echo "  ℹ️  --engines only pushes already-built local engine images. Use --push to push them."
+  fi
+fi
+
 echo ""
 echo "Done. Images built$(if $DO_PUSH; then echo " and pushed"; fi):"
-$BUILD_CPU     && echo "   ${REPO}/growebby-base-backend-cpu:${TAG}"
-$BUILD_CUDA    && echo "   ${REPO}/growebby-base-backend-cuda:${TAG}"
-$BUILD_METAL   && echo "   ${REPO}/growebby-base-backend-metal:${TAG}"
+$BUILD_CPU      && echo "   ${REPO}/growebby-base-backend-cpu:${TAG}"
+$BUILD_CUDA     && echo "   ${REPO}/growebby-base-backend-cuda:${TAG}"
+$BUILD_METAL    && echo "   ${REPO}/growebby-base-backend-metal:${TAG}"
 $BUILD_FRONTEND && echo "   ${REPO}/growebby-base-frontend:${TAG}"
+$BUILD_ENGINES  && echo "   ${REPO}/growebby-gromacs-{cuda,cpu,metal}-engine:${TAG} (push only)"
 echo ""
 if ! $DO_PUSH; then
-  echo " To push to Docker Hub, re-run with --push"
+  echo "  ℹ️  To push to Docker Hub, re-run with --push"
 fi

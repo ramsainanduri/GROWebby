@@ -65,7 +65,10 @@ if [[ "${GROWEBBY_ENGINE:-}" == "mac-opencl-native" ]]; then
     echo $! > ../.app_state/backend.pid
   )
 else
-  docker compose up --build -d
+  # Only rebuild the thin app layers (backend + frontend).
+  # GROMACS engine containers are pre-built tool images pulled from Docker Hub.
+  docker compose up --build backend frontend -d
+  docker compose up -d
 fi
 
 echo "Waiting for backend to initialize..."
