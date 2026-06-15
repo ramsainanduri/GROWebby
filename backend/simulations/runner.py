@@ -47,6 +47,10 @@ ENERGY_TERMS = [
     ("Temperature", "temperature", "Temperature", "K"),
     ("Pressure", "pressure", "Pressure", "bar"),
     ("Density", "density", "Density", "kg/m3"),
+    ("LJ-14", "lj14", "LJ-14", "kJ/mol"),
+    ("Coulomb-14", "coulomb14", "Coulomb-14", "kJ/mol"),
+    ("LJ-(SR)", "ljSR", "LJ Short-Range", "kJ/mol"),
+    ("Coulomb-(SR)", "coulombSR", "Coulomb Short-Range", "kJ/mol"),
 ]
 
 ENERGY_NAME_TO_KEY = {
@@ -59,7 +63,65 @@ ENERGY_NAME_TO_KEY = {
     "temperature": "temperature",
     "pressure": "pressure",
     "density": "density",
+    "lj-14": "lj14",
+    "coulomb-14": "coulomb14",
+    "lj-(sr)": "ljSR",
+    "coulomb-(sr)": "coulombSR",
 }
+
+# ── All force fields shipped with GROMACS 2025/2026 ──────────────────────────
+# Checked against pdb2gmx -h output and GROMACS source (share/gromacs/top/).
+# Each entry: (ff_dir_name, display_label, category)
+FORCE_FIELDS: list[tuple[str, str, str]] = [
+    # AMBER family
+    ("amber94",        "AMBER94",                        "AMBER"),
+    ("amber96",        "AMBER96",                        "AMBER"),
+    ("amber99",        "AMBER99",                        "AMBER"),
+    ("amber99sb",      "AMBER99SB",                      "AMBER"),
+    ("amber99sb-ildn", "AMBER99SB-ILDN (recommended)",   "AMBER"),
+    ("amberGS",        "AMBER-GS",                       "AMBER"),
+    ("amber03",        "AMBER03",                        "AMBER"),
+    ("amber03ws",      "AMBER03ws (w/ water)",           "AMBER"),
+    ("amber14sb",      "AMBER14SB",                      "AMBER"),
+    ("amber14sb_OL15", "AMBER14SB + OL15 RNA/DNA",       "AMBER"),
+    # CHARMM family
+    ("charmm27",       "CHARMM27",                       "CHARMM"),
+    ("charmm36",       "CHARMM36",                       "CHARMM"),
+    ("charmm36-feb2021","CHARMM36 (Feb 2021)",           "CHARMM"),
+    ("charmm36m",      "CHARMM36m (IDP-improved)",       "CHARMM"),
+    ("charmmm36-mar2019","CHARMM36 (Mar 2019)",          "CHARMM"),
+    # GROMOS family
+    ("gromos43a1",     "GROMOS43A1",                     "GROMOS"),
+    ("gromos43a2",     "GROMOS43A2",                     "GROMOS"),
+    ("gromos45a3",     "GROMOS45A3",                     "GROMOS"),
+    ("gromos53a5",     "GROMOS53A5",                     "GROMOS"),
+    ("gromos53a6",     "GROMOS53A6",                     "GROMOS"),
+    ("gromos54a7",     "GROMOS54A7",                     "GROMOS"),
+    # OPLS family
+    ("oplsaa",         "OPLS-AA/L (all-atom)",           "OPLS"),
+    ("oplsaa_SEI",     "OPLS-AA/L + SEI ions",           "OPLS"),
+    # Other / special
+    ("amoeba",         "AMOEBA (polarizable)",           "Polarizable"),
+]
+
+# ── All water models shipped with GROMACS ────────────────────────────────────
+# Values are the -water flag argument for pdb2gmx.
+WATER_MODELS: list[tuple[str, str, str]] = [
+    ("tip3p",   "TIP3P (3-site, most common)",        "3-site"),
+    ("tip4p",   "TIP4P (4-site)",                     "4-site"),
+    ("tip4pew", "TIP4P/Ew (4-site, Ewald)",           "4-site"),
+    ("tip4p2005","TIP4P/2005",                        "4-site"),
+    ("tip5p",   "TIP5P (5-site)",                     "5-site"),
+    ("tip5pe",  "TIP5P-E (5-site extended)",          "5-site"),
+    ("spc",     "SPC (simple point charge)",          "3-site"),
+    ("spce",    "SPC/E (extended SPC)",               "3-site"),
+    ("spceb",   "SPC/Eb",                             "3-site"),
+    ("opc",     "OPC (optimal 4-site)",               "4-site"),
+    ("opc3",    "OPC3 (optimal 3-site)",              "3-site"),
+    ("fb3",     "FB3 (force-balanced 3-site)",        "3-site"),
+    ("fb4",     "FB4 (force-balanced 4-site)",        "4-site"),
+    ("none",    "None (implicit or dry system)",      "special"),
+]
 
 
 class SimulationCancelled(Exception):
@@ -143,6 +205,48 @@ def gpu_execution_available() -> bool:
         return False
     return "GPU support:" in completed.stdout and "OpenCL" in completed.stdout
 
+
+# ── Per-user workspace path helpers ──────────────────────────────────────────
+
+def user_dir_for_job(job: SimulationJob) -> str:
+    """
+    Returns a stable directory name scoped to the job owner.
+    Format: ``u<user_id>``  — integer user IDs never collide across accounts.
+    Anonymous jobs fall back to ``u0``.
+    """
+    if job.owner_id:
+        return f"u{job.owner_id}"
+    return "u0"
+
+
+def run_workspace(job: SimulationJob):
+    """
+    Returns the workspace Path for a job, creating it if required.
+
+    Physical layout on the host::
+
+        .app_state/media/workspaces/u<user_id>/<workspace_slug>/
+
+    This means two users can both have a run called ``run-1-my-protein``
+    without any filesystem collision.
+    """
+    slug = job.workspace_slug or f"run-{job.id}-{slugify(job.name or 'simulation')[:80]}"
+    path = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / slug
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def workspace_media_url(job: SimulationJob, relative: str = "") -> str:
+    """
+    Returns the MEDIA_URL-relative URL for a file inside this job's workspace.
+    ``relative`` should be the path inside the workspace directory (no leading slash).
+    """
+    slug = job.workspace_slug or f"run-{job.id}"
+    base = f"{settings.MEDIA_URL}workspaces/{user_dir_for_job(job)}/{slug}/"
+    return base + relative
+
+
+# ── Artifact helpers ──────────────────────────────────────────────────────────
 
 def run_command(job: SimulationJob, command: list[str], cwd, stdin: str | None = None, step_key: str = "workflow") -> None:
     check_cancelled(job)
@@ -282,7 +386,7 @@ def expected_metric_points(step_key: str, parameters: dict[str, Any]) -> int:
 
 
 def metrics_to_csv(metrics: list[dict[str, Any]]) -> str:
-    preferred = ["stage", "progress", "sample", "timePs", "energy", "potential", "totalEnergy", "kineticEnergy", "temperature", "pressure", "density"]
+    preferred = ["stage", "progress", "sample", "timePs", "energy", "potential", "totalEnergy", "kineticEnergy", "temperature", "pressure", "density", "lj14", "coulomb14", "ljSR", "coulombSR"]
     keys = [key for key in preferred if any(key in metric for metric in metrics)]
     keys.extend(sorted({key for metric in metrics for key in metric.keys()} - set(keys)))
     if not keys:
@@ -397,148 +501,356 @@ def run_mdrun_with_live_metrics(
     return stage_metrics
 
 
-def run_workspace(job: SimulationJob):
-    slug = job.workspace_slug or f"run-{job.id}-{slugify(job.name or 'simulation')[:80]}"
-    path = settings.MEDIA_ROOT / "workspaces" / slug
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def write_artifact(job: SimulationJob, name: str, content: str) -> str:
     workspace = run_workspace(job)
     path = workspace / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    return f"{settings.MEDIA_URL}workspaces/{job.workspace_slug}/{name}"
+    return workspace_media_url(job, name)
 
+
+# ── MDP file generation ───────────────────────────────────────────────────────
 
 def make_mdp(parameters: dict[str, Any], stage: str) -> str:
+    """
+    Generate a GROMACS MDP parameter file for ``stage``.
+    All parameters are read from the ``parameters`` dict so the frontend can
+    override every individual field.
+    """
     dt = float(parameters.get("dt", 0.002))
     output_every_ps = float(parameters.get("outputEveryPs", 10))
     output_nst = max(1, round(output_every_ps / dt))
-    base = [
-        f"; created by GROWebby for {stage}",
-        "integrator              = md" if stage != "minim" else f"integrator              = {parameters.get('minimizer', 'steep')}",
-        f"dt                      = {dt}",
-        f"constraints             = {parameters.get('constraints', 'h-bonds')}",
-    ]
+
+    # ── Ion placement: minimal steep descent for grompp purposes ─────────────
     if stage == "ions":
-        return "\n".join(
-            [
-                "; created by GROWebby for ion placement",
-                "integrator              = steep",
-                "emtol                   = 1000",
-                "emstep                  = 0.01",
-                "nsteps                  = 500",
-                "",
-            ]
-        )
+        return "\n".join([
+            "; created by GROWebby for ion placement",
+            "integrator              = steep",
+            f"emtol                   = {parameters.get('ionEmtol', 1000)}",
+            f"emstep                  = {parameters.get('ionEmstep', 0.01)}",
+            "nsteps                  = 500",
+            "",
+        ])
+
+    # ── Energy minimisation ───────────────────────────────────────────────────
     if stage == "minim":
         minimization_steps = int(parameters.get("minimizationSteps", 50000))
         minim_output_nst = max(1, minimization_steps // 100)
-        base.extend(
-            [
-                f"emtol                   = {parameters.get('emtol', 1000)}",
-                f"emstep                  = {parameters.get('emstep', 0.01)}",
-                f"nsteps                  = {minimization_steps}",
-                f"nstenergy               = {minim_output_nst}",
-                f"nstlog                  = {minim_output_nst}",
-            ]
-        )
+        integrator = str(parameters.get("minimizer", "steep"))
+        lines = [
+            "; created by GROWebby for energy minimisation",
+            f"integrator              = {integrator}",
+            f"emtol                   = {parameters.get('emtol', 1000.0)}",
+            f"emstep                  = {parameters.get('emstep', 0.01)}",
+            f"nsteps                  = {minimization_steps}",
+            f"nstenergy               = {minim_output_nst}",
+            f"nstlog                  = {minim_output_nst}",
+            # non-bonded
+            f"cutoff-scheme           = {parameters.get('cutoffScheme', 'Verlet')}",
+            f"ns-type                 = {parameters.get('nsType', 'grid')}",
+            f"nstlist                 = {parameters.get('nstlist', 1)}",
+            f"rcoulomb                = {parameters.get('rcoulomb', 1.0)}",
+            f"rvdw                    = {parameters.get('rvdw', 1.0)}",
+            f"coulombtype             = {parameters.get('coulombtype', 'PME')}",
+            f"pme-order               = {parameters.get('pmeOrder', 4)}",
+            f"fourierspacing          = {parameters.get('fourierspacing', 0.12)}",
+            f"vdwtype                 = {parameters.get('vdwtype', 'Cut-off')}",
+            f"vdw-modifier            = {parameters.get('vdwModifier', 'Force-switch')}",
+            f"rvdw-switch             = {parameters.get('rvdwSwitch', 0.9)}",
+            f"constraints             = {parameters.get('constraints', 'none')}",
+        ]
+        if integrator == "l-bfgs":
+            lines.append(f"lbfgs-init-step-size    = {parameters.get('lbfgsInitStep', 0.01)}")
+            lines.append(f"nbfgs-corrections       = {parameters.get('nbfgsCorrections', 10)}")
+        return "\n".join(line for line in lines if line) + "\n"
+
+    # ── MD stages: NVT / NPT / production ────────────────────────────────────
+    if stage == "production":
+        ps = float(parameters.get("productionNs", 10)) * 1000
     else:
-        ps = float(parameters.get("productionNs", 10)) * 1000 if stage == "production" else float(parameters.get(f"{stage}Ps", parameters.get("equilibrationPs", 100)))
-        base.extend(
-            [
-                f"nsteps                  = {round(ps / dt)}",
-                f"nstenergy               = {output_nst}",
-                f"nstlog                  = {output_nst}",
-                f"nstxout-compressed      = {output_nst}",
-                f"tcoupl                  = {parameters.get('thermostat', 'V-rescale')}",
-                "tc-grps                 = System",
-                f"ref_t                   = {parameters.get('temperature', 300)}",
-                "tau_t                   = 0.1",
-                f"pcoupl                  = {'no' if stage == 'nvt' else parameters.get('barostat', 'Parrinello-Rahman')}",
-                "pcoupltype              = isotropic",
-                f"ref_p                   = {parameters.get('pressure', 1)}",
-                "tau_p                   = 2.0",
-                "compressibility         = 4.5e-5",
-                "define                  = -DPOSRES" if stage in {"nvt", "npt"} else "",
-            ]
-        )
-    return "\n".join(line for line in base if line) + "\n"
+        ps = float(parameters.get(f"{stage}Ps", parameters.get("equilibrationPs", 100)))
+
+    nsteps = round(ps / dt)
+    thermostat   = str(parameters.get("thermostat", "V-rescale"))
+    temperature  = float(parameters.get("temperature", 300))
+    tau_t        = float(parameters.get("tauT", 0.1))
+    tc_groups    = str(parameters.get("tcGroups", "Protein Non-Protein"))
+    ref_t_line   = " ".join(str(temperature) for _ in tc_groups.split())
+    tau_t_line   = " ".join(str(tau_t) for _ in tc_groups.split())
+    barostat     = "no" if stage == "nvt" else str(parameters.get("barostat", "Parrinello-Rahman"))
+    pressure     = float(parameters.get("pressure", 1.0))
+    tau_p        = float(parameters.get("tauP", 2.0))
+    compressibility = str(parameters.get("compressibility", "4.5e-5"))
+    pcoupltype   = str(parameters.get("pcoupltype", "isotropic"))
+    define_posres = "-DPOSRES" if stage in {"nvt", "npt"} else ""
+    continuation = "no" if stage == "nvt" else "yes"
+    gen_vel      = "yes" if stage == "nvt" else "no"
+    gen_seed     = int(parameters.get("genSeed", -1))
+    integrator   = str(parameters.get("integrator", "md"))
+
+    lines = [
+        f"; created by GROWebby for {stage}",
+        f"integrator              = {integrator}",
+        f"dt                      = {dt}",
+        f"nsteps                  = {nsteps}",
+        "",
+        "; Output control",
+        f"nstenergy               = {output_nst}",
+        f"nstlog                  = {output_nst}",
+        f"nstxout-compressed      = {output_nst}",
+        f"nstxout                 = {int(parameters.get('nstxout', 0))}",
+        f"nstvout                 = {int(parameters.get('nstvout', 0))}",
+        f"nstfout                 = {int(parameters.get('nstfout', 0))}",
+        f"compressed-x-precision  = {parameters.get('compressedXPrecision', 1000)}",
+        "",
+        "; Neighbour searching",
+        f"cutoff-scheme           = {parameters.get('cutoffScheme', 'Verlet')}",
+        f"ns-type                 = {parameters.get('nsType', 'grid')}",
+        f"nstlist                 = {parameters.get('nstlist', 10)}",
+        f"rcoulomb                = {parameters.get('rcoulomb', 1.0)}",
+        f"rvdw                    = {parameters.get('rvdw', 1.0)}",
+        "",
+        "; Electrostatics",
+        f"coulombtype             = {parameters.get('coulombtype', 'PME')}",
+        f"coulomb-modifier        = {parameters.get('coulombModifier', 'Potential-shift')}",
+        f"pme-order               = {parameters.get('pmeOrder', 4)}",
+        f"fourierspacing          = {parameters.get('fourierspacing', 0.12)}",
+        f"ewald-rtol              = {parameters.get('ewaldRtol', '1e-05')}",
+        f"epsilon-r               = {parameters.get('epsilonR', 1)}",
+        "",
+        "; van der Waals",
+        f"vdwtype                 = {parameters.get('vdwtype', 'Cut-off')}",
+        f"vdw-modifier            = {parameters.get('vdwModifier', 'Force-switch')}",
+        f"rvdw-switch             = {parameters.get('rvdwSwitch', 0.9)}",
+        f"DispCorr                = {parameters.get('dispCorr', 'EnerPres')}",
+        "",
+        "; Bonds",
+        f"constraints             = {parameters.get('constraints', 'h-bonds')}",
+        f"constraint-algorithm    = {parameters.get('constraintAlgorithm', 'LINCS')}",
+        f"lincs-iter              = {parameters.get('lincsIter', 1)}",
+        f"lincs-order             = {parameters.get('lincsOrder', 4)}",
+        f"continuation            = {continuation}",
+        "",
+        "; Temperature coupling",
+        f"tcoupl                  = {thermostat}",
+        f"tc-grps                 = {tc_groups}",
+        f"ref_t                   = {ref_t_line}",
+        f"tau_t                   = {tau_t_line}",
+        f"nhchainlength           = {parameters.get('nhChainLength', 10)}",
+    ]
+
+    if define_posres:
+        lines += ["", f"define                  = {define_posres}"]
+
+    lines += [
+        "",
+        "; Pressure coupling",
+        f"pcoupl                  = {barostat}",
+        f"pcoupltype              = {pcoupltype}",
+        f"ref_p                   = {pressure}",
+        f"tau_p                   = {tau_p}",
+        f"compressibility         = {compressibility}",
+        f"refcoord-scaling        = {parameters.get('refcoordScaling', 'com')}",
+        "",
+        "; Velocity generation",
+        f"gen-vel                 = {gen_vel}",
+        f"gen-temp                = {temperature}",
+        f"gen-seed                = {gen_seed}",
+        "",
+        "; Free energy (off by default)",
+        f"free-energy             = {parameters.get('freeEnergy', 'no')}",
+        "",
+        "; Periodic boundary conditions",
+        f"pbc                     = {parameters.get('pbc', 'xyz')}",
+        "",
+        "; COM motion removal",
+        f"comm-mode               = {parameters.get('commMode', 'Linear')}",
+        f"nstcomm                 = {parameters.get('nstcomm', 100)}",
+        f"comm-grps               = {parameters.get('commGroups', 'System')}",
+    ]
+
+    return "\n".join(line for line in lines if line is not None) + "\n"
 
 
-def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[dict[str, str]]:
-    workspace = run_workspace(job)
-    (workspace / "outputs").mkdir(parents=True, exist_ok=True)
-    (workspace / "analysis").mkdir(parents=True, exist_ok=True)
-    artifacts: list[dict[str, str]] = []
-    input_target = workspace / job.upload.original_name
-    try:
-        shutil.copyfile(job.upload.file.path, input_target)
-        artifacts.append({"name": job.upload.original_name, "kind": "input", "path": job.upload.original_name, "url": f"{settings.MEDIA_URL}workspaces/{job.workspace_slug}/{job.upload.original_name}"})
-    except Exception as exc:
-        append_log(job, f"Could not copy input into workspace: {exc}")
-
-    for name, content in {
-        "ions.mdp": make_mdp(parameters, "ions"),
-        "minim.mdp": make_mdp(parameters, "minim"),
-        "nvt.mdp": make_mdp(parameters, "nvt"),
-        "npt.mdp": make_mdp(parameters, "npt"),
-        "production.mdp": make_mdp(parameters, "production"),
-        "workflow-preview.txt": str(parameters.get("generatedConfig", "")).strip(),
-        "run-manifest.json": json.dumps({"job": job.id, "mode": parameters.get("executionMode", "gromacs"), "input": job.upload.original_name, "parameters": parameters}, indent=2),
-    }.items():
-        url = write_artifact(job, name, content)
-        artifacts.append({"name": name, "kind": "config", "path": name, "url": url})
-    return artifacts
-
+# ── Command builders ──────────────────────────────────────────────────────────
 
 def step_commands(step_key: str, parameters: dict[str, Any], job: SimulationJob) -> list[tuple[list[str], str | None]]:
     gmx = gmx_binary()
     if not gmx:
         raise RuntimeError("GROMACS binary was not found. Rebuild the backend image or set GROMACS_BINARY to a valid gmx executable.")
-    input_name = job.upload.original_name
-    force_field = str(parameters.get("forceField", "amber99sb-ildn"))
-    water_model = str(parameters.get("waterModel", "tip3p"))
+
+    input_name   = job.upload.original_name
+    force_field  = str(parameters.get("forceField", "amber99sb-ildn"))
+    water_model  = str(parameters.get("waterModel", "tip3p"))
     gpu_requested = bool(parameters.get("useGpu"))
-    gpu_allowed = gpu_execution_available()
+    gpu_allowed  = gpu_execution_available()
     if gpu_requested and not gpu_allowed:
         append_log(job, "GPU acceleration was requested, but the active GROMACS engine has no GPU support. Running this step on CPU.")
-    gpu_args = ["-nb", "gpu"] if gpu_requested and gpu_allowed else []
+
+    # mdrun GPU flags
+    gpu_args: list[str] = []
+    if gpu_requested and gpu_allowed:
+        gpu_args = ["-nb", "gpu", "-bonded", str(parameters.get("gpuBonded", "cpu")), "-pme", str(parameters.get("gpuPme", "cpu"))]
+
+    # mdrun performance flags
+    ntomp   = int(parameters.get("ntomp", 0))
+    ntmpi   = int(parameters.get("ntmpi", 0))
+    pinoffset = int(parameters.get("pinoffset", 0))
+    perf_args = []
+    if ntomp:
+        perf_args += ["-ntomp", str(ntomp)]
+    if ntmpi:
+        perf_args += ["-ntmpi", str(ntmpi)]
+    if pinoffset:
+        perf_args += ["-pinoffset", str(pinoffset)]
+    if parameters.get("pinstride"):
+        perf_args += ["-pinstride", str(parameters["pinstride"])]
+
+    # grompp maxwarn
+    maxwarn = str(parameters.get("maxwarn", 1))
+
+    # pdb2gmx flags
+    pdb2gmx_args: list[str] = ["-ignh"]
+    if parameters.get("ter"):
+        pdb2gmx_args += ["-ter"]
+    if parameters.get("merge") == "all":
+        pdb2gmx_args += ["-merge", "all"]
+    elif parameters.get("merge") == "interactive":
+        pdb2gmx_args += ["-merge", "interactive"]
+    if parameters.get("renum"):
+        pdb2gmx_args += ["-renum"]
+    if parameters.get("heavyh"):
+        pdb2gmx_args += ["-heavyh"]
+    if parameters.get("chainsep"):
+        pdb2gmx_args += ["-chainsep", str(parameters["chainsep"])]
+    if parameters.get("his"):
+        pdb2gmx_args += ["-his", str(parameters["his"])]
+
+    # editconf flags
+    box_type = str(parameters.get("boxType", "dodecahedron"))
+    distance_nm = str(parameters.get("distanceNm", 1.0))
+    editconf_args = ["-bt", box_type, "-d", distance_nm, "-c"]
+    if parameters.get("boxX") and parameters.get("boxY") and parameters.get("boxZ"):
+        editconf_args += ["-box", str(parameters["boxX"]), str(parameters["boxY"]), str(parameters["boxZ"])]
+    if parameters.get("angles"):
+        a = parameters["angles"]
+        editconf_args += ["-angles", str(a[0]), str(a[1]), str(a[2])]
+    if parameters.get("translate"):
+        t = parameters["translate"]
+        editconf_args += ["-translate", str(t[0]), str(t[1]), str(t[2])]
+    if parameters.get("rotate"):
+        r = parameters["rotate"]
+        editconf_args += ["-rotate", str(r[0]), str(r[1]), str(r[2])]
+
+    # solvate flags
+    solvent_struct = str(parameters.get("solventStructure", "spc216.gro"))
+    solvent_scale  = str(parameters.get("solventScale", 0.57))
+    solvate_args   = ["-cs", solvent_struct, "-scale", solvent_scale]
+    if parameters.get("maxsolv"):
+        solvate_args += ["-maxsol", str(parameters["maxsolv"])]
+    if parameters.get("shell"):
+        solvate_args += ["-shell", str(parameters["shell"])]
+
+    # genion flags
+    pos_ion  = str(parameters.get("positiveIon", "NA"))
+    neg_ion  = str(parameters.get("negativeIon", "CL"))
+    salt_mol = str(parameters.get("saltMolar", 0.15))
+    genion_args = ["-pname", pos_ion, "-nname", neg_ion, "-conc", salt_mol, "-neutral"]
+    if parameters.get("npos"):
+        genion_args += ["-np", str(parameters["npos"]), "-nn", str(parameters.get("nneg", 0))]
+        genion_args = [a for a in genion_args if a != "-neutral"]  # -neutral conflicts with explicit counts
+
     commands: dict[str, list[tuple[list[str], str | None]]] = {
         "topology": [
-            ([gmx, "pdb2gmx", "-f", input_name, "-o", "outputs/processed.gro", "-p", "topol.top", "-ff", force_field, "-water", water_model, "-ignh"], None),
+            ([gmx, "pdb2gmx",
+              "-f", input_name,
+              "-o", "outputs/processed.gro",
+              "-p", "topol.top",
+              "-i", "posre.itp",
+              "-ff", force_field,
+              "-water", water_model,
+              *pdb2gmx_args], None),
         ],
         "box": [
-            ([gmx, "editconf", "-f", "outputs/processed.gro", "-o", "outputs/boxed.gro", "-bt", str(parameters.get("boxType", "dodecahedron")), "-d", str(parameters.get("distanceNm", 1.0)), "-c"], None),
+            ([gmx, "editconf",
+              "-f", "outputs/processed.gro",
+              "-o", "outputs/boxed.gro",
+              *editconf_args], None),
         ],
         "solvation": [
-            ([gmx, "solvate", "-cp", "outputs/boxed.gro", "-cs", str(parameters.get("solventStructure", "spc216.gro")), "-o", "outputs/solvated.gro", "-p", "topol.top", "-scale", str(parameters.get("solventScale", 0.57))], None),
+            ([gmx, "solvate",
+              "-cp", "outputs/boxed.gro",
+              "-o", "outputs/solvated.gro",
+              "-p", "topol.top",
+              *solvate_args], None),
         ],
         "ions": [
-            ([gmx, "grompp", "-f", "ions.mdp", "-c", "outputs/solvated.gro", "-p", "topol.top", "-o", "ions.tpr", "-maxwarn", "1"], None),
-            ([gmx, "genion", "-s", "ions.tpr", "-o", "outputs/ionized.gro", "-p", "topol.top", "-pname", str(parameters.get("positiveIon", "NA")), "-nname", str(parameters.get("negativeIon", "CL")), "-conc", str(parameters.get("saltMolar", 0.15)), "-neutral"], "SOL\n"),
+            ([gmx, "grompp",
+              "-f", "ions.mdp",
+              "-c", "outputs/solvated.gro",
+              "-p", "topol.top",
+              "-o", "ions.tpr",
+              "-maxwarn", maxwarn], None),
+            ([gmx, "genion",
+              "-s", "ions.tpr",
+              "-o", "outputs/ionized.gro",
+              "-p", "topol.top",
+              *genion_args], "SOL\n"),
         ],
         "minimize": [
-            ([gmx, "grompp", "-f", "minim.mdp", "-c", "outputs/ionized.gro", "-p", "topol.top", "-o", "minim.tpr", "-maxwarn", "1"], None),
-            ([gmx, "mdrun", "-deffnm", "minim", *gpu_args], None),
+            ([gmx, "grompp",
+              "-f", "minim.mdp",
+              "-c", "outputs/ionized.gro",
+              "-p", "topol.top",
+              "-o", "minim.tpr",
+              "-maxwarn", maxwarn], None),
+            ([gmx, "mdrun",
+              "-v",
+              "-deffnm", "minim",
+              *gpu_args, *perf_args], None),
         ],
         "nvt": [
-            ([gmx, "grompp", "-f", "nvt.mdp", "-c", "minim.gro", "-r", "minim.gro", "-p", "topol.top", "-o", "nvt.tpr", "-maxwarn", "1"], None),
-            ([gmx, "mdrun", "-deffnm", "nvt", *gpu_args], None),
+            ([gmx, "grompp",
+              "-f", "nvt.mdp",
+              "-c", "minim.gro",
+              "-r", "minim.gro",
+              "-p", "topol.top",
+              "-o", "nvt.tpr",
+              "-maxwarn", maxwarn], None),
+            ([gmx, "mdrun",
+              "-deffnm", "nvt",
+              *gpu_args, *perf_args], None),
         ],
         "npt": [
-            ([gmx, "grompp", "-f", "npt.mdp", "-c", "nvt.gro", "-r", "nvt.gro", "-t", "nvt.cpt", "-p", "topol.top", "-o", "npt.tpr", "-maxwarn", "1"], None),
-            ([gmx, "mdrun", "-deffnm", "npt", *gpu_args], None),
+            ([gmx, "grompp",
+              "-f", "npt.mdp",
+              "-c", "nvt.gro",
+              "-r", "nvt.gro",
+              "-t", "nvt.cpt",
+              "-p", "topol.top",
+              "-o", "npt.tpr",
+              "-maxwarn", maxwarn], None),
+            ([gmx, "mdrun",
+              "-deffnm", "npt",
+              *gpu_args, *perf_args], None),
         ],
         "production": [
-            ([gmx, "grompp", "-f", "production.mdp", "-c", "npt.gro", "-t", "npt.cpt", "-p", "topol.top", "-o", "production.tpr", "-maxwarn", "1"], None),
-            ([gmx, "mdrun", "-deffnm", "production", *gpu_args], None),
+            ([gmx, "grompp",
+              "-f", "production.mdp",
+              "-c", "npt.gro",
+              "-t", "npt.cpt",
+              "-p", "topol.top",
+              "-o", "production.tpr",
+              "-maxwarn", maxwarn], None),
+            ([gmx, "mdrun",
+              "-deffnm", "production",
+              *gpu_args, *perf_args], None),
         ],
     }
     return commands[step_key]
 
+
+# ── Pipeline helpers ──────────────────────────────────────────────────────────
 
 def step_index(step_key: str) -> int:
     return next((index for index, (key, _name, _progress) in enumerate(PIPELINE_STEPS) if key == step_key), -1)
@@ -552,7 +864,7 @@ def previous_step_key(step_key: str) -> str | None:
 
 
 def step_output_url(job: SimulationJob, step_key: str) -> str:
-    return f"{settings.MEDIA_URL}workspaces/{job.workspace_slug}/{STEP_OUTPUTS[step_key]}"
+    return workspace_media_url(job, STEP_OUTPUTS[step_key])
 
 
 def latest_completed_job_with_step(upload, step_key: str, owner=None) -> SimulationJob | None:
@@ -579,13 +891,52 @@ def import_previous_step_workspace(job: SimulationJob, step_key: str) -> None:
     source_job = latest_completed_job_with_step(job.upload, previous, owner)
     if source_job is None or not source_job.workspace_slug:
         return
-    source = settings.MEDIA_ROOT / "workspaces" / source_job.workspace_slug
+    source = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(source_job) / source_job.workspace_slug
     target = run_workspace(job)
     if not source.exists() or source.resolve() == target.resolve():
         return
     shutil.copytree(source, target, dirs_exist_ok=True)
     append_log(job, f"Imported files from previous step run #{source_job.id} ({previous.upper()}) before continuing.")
 
+
+def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[dict[str, str]]:
+    workspace = run_workspace(job)
+    (workspace / "outputs").mkdir(parents=True, exist_ok=True)
+    (workspace / "analysis").mkdir(parents=True, exist_ok=True)
+    artifacts: list[dict[str, str]] = []
+    input_target = workspace / job.upload.original_name
+    try:
+        shutil.copyfile(job.upload.file.path, input_target)
+        artifacts.append({
+            "name": job.upload.original_name,
+            "kind": "input",
+            "path": job.upload.original_name,
+            "url": workspace_media_url(job, job.upload.original_name),
+        })
+    except Exception as exc:
+        append_log(job, f"Could not copy input into workspace: {exc}")
+
+    for name, content in {
+        "ions.mdp":        make_mdp(parameters, "ions"),
+        "minim.mdp":       make_mdp(parameters, "minim"),
+        "nvt.mdp":         make_mdp(parameters, "nvt"),
+        "npt.mdp":         make_mdp(parameters, "npt"),
+        "production.mdp":  make_mdp(parameters, "production"),
+        "workflow-preview.txt": str(parameters.get("generatedConfig", "")).strip(),
+        "run-manifest.json": json.dumps({
+            "job": job.id,
+            "owner": job.owner.get_username() if job.owner else None,
+            "mode": parameters.get("executionMode", "gromacs"),
+            "input": job.upload.original_name,
+            "parameters": parameters,
+        }, indent=2),
+    }.items():
+        url = write_artifact(job, name, content)
+        artifacts.append({"name": name, "kind": "config", "path": name, "url": url})
+    return artifacts
+
+
+# ── Main runner ───────────────────────────────────────────────────────────────
 
 def run_simulation(job_id: int) -> None:
     close_old_connections()
@@ -615,10 +966,11 @@ def run_simulation(job_id: int) -> None:
         elif gmx:
             append_log(job, f"GROMACS binary: {gmx}.")
         append_log(job, f"Input coordinate file: {job.upload.original_name}")
+        append_log(job, f"Workspace: workspaces/{user_dir_for_job(job)}/{job.workspace_slug}")
         parameters: dict[str, Any] = job.parameters
         parameters["executionMode"] = mode
         start_step = str(parameters.get("startStep", "topology"))
-        run_until = str(parameters.get("runUntil", "production"))
+        run_until  = str(parameters.get("runUntil", "production"))
         generated_config = str(parameters.get("generatedConfig", "")).strip()
         if start_step == "equilibrate":
             start_step = "nvt"
@@ -657,7 +1009,7 @@ def run_simulation(job_id: int) -> None:
                 for progress in range(previous_progress + 1, target_progress + 1):
                     check_cancelled(job)
                     temperature = float(parameters.get("temperature", 300))
-                    pressure = float(parameters.get("pressure", 1))
+                    pressure    = float(parameters.get("pressure", 1))
                     density_target = 998 if step_key in {"npt", "production"} else 940
                     energy = -1200 + math.sin(progress / 8) * 80 - progress * 2 + random.uniform(-8, 8)
                     metric = {
@@ -712,7 +1064,12 @@ def run_simulation(job_id: int) -> None:
             ]
             energy_xvg = run_workspace(job) / "analysis" / f"{step_key}-gromacs-energy.xvg"
             if energy_xvg.exists():
-                artifacts.append({"name": f"{step_key}-gromacs-energy.xvg", "kind": "analysis", "path": f"analysis/{step_key}-gromacs-energy.xvg", "url": f"{settings.MEDIA_URL}workspaces/{job.workspace_slug}/analysis/{step_key}-gromacs-energy.xvg"})
+                artifacts.append({
+                    "name": f"{step_key}-gromacs-energy.xvg",
+                    "kind": "analysis",
+                    "path": f"analysis/{step_key}-gromacs-energy.xvg",
+                    "url": workspace_media_url(job, f"analysis/{step_key}-gromacs-energy.xvg"),
+                })
             parameters["artifactFiles"] = artifacts
             job.parameters = parameters
             job.save(update_fields=["parameters", "updated_at"])
