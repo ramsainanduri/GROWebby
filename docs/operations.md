@@ -110,10 +110,10 @@ GROWEBBY_SERVE_MEDIA=1
 GROWEBBY_ENGINE=docker-backend-cpu
 GROMACS_EXECUTION_MODE=backend-gmx-2026.2
 GROMACS_BINARY=/usr/local/gromacs/bin/gmx
-GROWEBBY_ALLOW_DEMO_RUNS=0
+GROWEBBY_ALLOW_VALIDATION_RUNS=0
 ```
 
-Use `DJANGO_DEBUG=1` only for backend development. `GROWEBBY_SERVE_MEDIA=1` keeps local run artifacts available through the browser while debug mode is off. Keep `GROWEBBY_ALLOW_DEMO_RUNS=0` for real GROMACS execution.
+Use `DJANGO_DEBUG=1` only for backend development. `GROWEBBY_SERVE_MEDIA=1` keeps local run artifacts available through the browser while debug mode is off. Keep `GROWEBBY_ALLOW_VALIDATION_RUNS=0` for real GROMACS execution.
 
 ## Common Startup Issues
 
@@ -194,11 +194,11 @@ Inspect the run log and the uploaded structure. Ligands and nonstandard residues
 
 Check the execution mode in Results.
 
-- `development-fallback`: synthetic demo mode only, not real MD.
+- `validation-mode`: synthetic validation mode only, not real MD.
 - `backend-gmx-2026.2`: real GROMACS in Docker CPU mode.
 - `native-opencl`: native macOS GROMACS OpenCL mode.
 
-The current default path should be real GROMACS unless `GROWEBBY_ALLOW_DEMO_RUNS=1` is explicitly set.
+The current default path should be real GROMACS unless `GROWEBBY_ALLOW_VALIDATION_RUNS=1` is explicitly set.
 
 ## Rebuild
 

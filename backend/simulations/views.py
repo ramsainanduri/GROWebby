@@ -20,7 +20,7 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from .models import SimulationJob, SimulationLog, UploadedCoordinate
 from .runner import completed_step_available, enqueue_simulation, previous_step_key
 
-LYSOZYME_DEMO_PDB = """HEADER    GROWebby lysozyme tutorial demo placeholder
+LYSOZYME_DEMO_PDB = """HEADER    GROWebby lysozyme tutorial validation structure
 ATOM      1  N   LYS A   1      -1.450   0.000   0.000  1.00 20.00           N
 ATOM      2  CA  LYS A   1      -0.080   0.000   0.000  1.00 20.00           C
 ATOM      3  C   LYS A   1       0.520   1.410   0.000  1.00 20.00           C
@@ -34,7 +34,7 @@ TER
 END
 """
 
-SMALL_MOLECULE_DEMO_PDB = """HEADER    GROWebby small molecule demo
+SMALL_MOLECULE_DEMO_PDB = """HEADER    GROWebby small molecule validation structure
 HETATM    1  C1  LIG A   1       0.000   0.000   0.000  1.00 10.00           C
 HETATM    2  O1  LIG A   1       1.210   0.000   0.000  1.00 10.00           O
 HETATM    3  N1  LIG A   1      -0.620   1.050   0.000  1.00 10.00           N
@@ -345,13 +345,13 @@ def simulation_artifact(request: HttpRequest, job_id: int) -> JsonResponse:
 
 @csrf_exempt
 @require_POST
-def create_demo(request: HttpRequest, demo_key: str) -> JsonResponse:
-    demos = {
+def create_example(request: HttpRequest, example_key: str) -> JsonResponse:
+    examples = {
         "lysozyme": {
-            "name": "lysozyme-tutorial-demo.pdb",
+            "name": "lysozyme-tutorial-example.pdb",
             "content": LYSOZYME_DEMO_PDB,
             "parameters": {
-                "demoName": "Lysozyme tutorial demo",
+                "exampleName": "Lysozyme tutorial example",
                 "tutorialUrl": "http://www.mdtutorials.com/gmx/lysozyme/index.html",
                 "forceField": "oplsaa",
                 "waterModel": "spce",
@@ -364,10 +364,10 @@ def create_demo(request: HttpRequest, demo_key: str) -> JsonResponse:
             },
         },
         "small-molecule": {
-            "name": "small-molecule-demo.pdb",
+            "name": "small-molecule-example.pdb",
             "content": SMALL_MOLECULE_DEMO_PDB,
             "parameters": {
-                "demoName": "Small molecule demo",
+                "exampleName": "Small molecule example",
                 "forceField": "oplsaa",
                 "waterModel": "tip3p",
                 "boxType": "dodecahedron",
@@ -379,19 +379,19 @@ def create_demo(request: HttpRequest, demo_key: str) -> JsonResponse:
             },
         },
     }
-    demo = demos.get(demo_key)
-    if demo is None:
-        return JsonResponse({"error": "Unknown demo setup."}, status=404)
+    example = examples.get(example_key)
+    if example is None:
+        return JsonResponse({"error": "Unknown example setup."}, status=404)
 
     first_group = request.user.groups.first() if request.user.is_authenticated else None
     upload = UploadedCoordinate(
         owner=request.user if request.user.is_authenticated else None,
         group=first_group,
-        original_name=demo["name"],
-        size=len(demo["content"]),
+        original_name=example["name"],
+        size=len(example["content"]),
     )
-    upload.file.save(demo["name"], ContentFile(demo["content"].encode("utf-8")), save=True)
-    return JsonResponse({"upload": upload_payload(upload), "parameters": demo["parameters"]}, status=201)
+    upload.file.save(example["name"], ContentFile(example["content"].encode("utf-8")), save=True)
+    return JsonResponse({"upload": upload_payload(upload), "parameters": example["parameters"]}, status=201)
 
 
 @require_GET

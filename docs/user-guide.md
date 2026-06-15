@@ -37,7 +37,7 @@ There is no permanent shared default account. The first admin should be created 
 
 The application sidebar contains the primary work areas:
 
-- Dashboard: recent activity, demo setup actions, and high-level status.
+- Dashboard: recent activity, example setup actions, and high-level status.
 - Workflow Setup: upload/select files, configure simulation steps, and start runs.
 - Files: uploaded coordinate files and selected input.
 - Simulation Runs: run history, current status, and run deletion.
@@ -146,11 +146,11 @@ During active `mdrun` stages, plots update with live progress points first. Once
 
 Runs can be deleted from the Simulation Runs page. Deleting a run removes the run record from the app. Treat this as a cleanup action; export or preserve important output files first.
 
-## Demo Setups
+## Example Setups
 
-The Dashboard can create demo inputs:
+The Dashboard can create example inputs:
 
 - Lysozyme tutorial-style setup.
-- Small molecule demo setup.
+- Small molecule example setup.
 
 These are intended to verify that the UI, upload handling, workflow configuration, and execution path are functioning. They are not substitutes for validated scientific input preparation.

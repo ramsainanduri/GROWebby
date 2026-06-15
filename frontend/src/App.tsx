@@ -42,7 +42,7 @@ import {
   AdminUser,
   ArtifactFile,
   cancelSimulation,
-  createDemoSetup,
+  createExampleSetup,
   createSimulation,
   deleteSimulation,
   getHealth,
@@ -273,18 +273,18 @@ function MainApp() {
     }
   }
 
-  async function createDemo(demoKey: "lysozyme" | "small-molecule") {
+  async function createExample(exampleKey: "lysozyme" | "small-molecule") {
     setBusy(true);
     setError("");
     try {
-      const demo = await createDemoSetup(demoKey);
-      setUpload(demo.upload);
-      setUploads((current) => [demo.upload, ...current.filter((item) => item.id !== demo.upload.id)]);
-      setParameters({ ...defaults, runName: makeRunName(demo.upload.originalName), ...demo.parameters });
-      notify("success", "Demo setup created.");
+      const example = await createExampleSetup(exampleKey);
+      setUpload(example.upload);
+      setUploads((current) => [example.upload, ...current.filter((item) => item.id !== example.upload.id)]);
+      setParameters({ ...defaults, runName: makeRunName(example.upload.originalName), ...example.parameters });
+      notify("success", "Example setup created.");
       navigate("/workflow");
     } catch (err) {
-      reportError(err, "Could not create demo setup");
+      reportError(err, "Could not create example setup");
     } finally {
       setBusy(false);
     }
@@ -494,7 +494,7 @@ function MainApp() {
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} createDemo={createDemo} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} busy={busy} />} />
+            <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} createExample={createExample} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} busy={busy} />} />
             <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} health={health} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} />} />
             <Route path="/files" element={<FilesView handleFile={handleFile} selectUpload={setUpload} upload={upload} uploads={uploads} />} />
             <Route path="/runs" element={<RunsView job={job} runs={runs} removeRun={removeRun} selectRun={selectRun} />} />
@@ -514,14 +514,14 @@ function MainApp() {
 type DashboardProps = {
   busy: boolean;
   completedRuns: number;
-  createDemo: (demoKey: "lysozyme" | "small-molecule") => void;
+  createExample: (exampleKey: "lysozyme" | "small-molecule") => void;
   failedRuns: number;
   job: SimulationJob | null;
   runningRuns: number;
   uploadsCount: number;
 };
 
-function DashboardView({ busy, completedRuns, createDemo, failedRuns, job, runningRuns, uploadsCount }: DashboardProps) {
+function DashboardView({ busy, completedRuns, createExample, failedRuns, job, runningRuns, uploadsCount }: DashboardProps) {
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-4">
@@ -555,12 +555,12 @@ function DashboardView({ busy, completedRuns, createDemo, failedRuns, job, runni
             })}
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <button type="button" disabled={busy} onClick={() => createDemo("lysozyme")} className="rounded-lg border border-ocean-200 bg-ocean-50 px-4 py-3 text-left transition hover:border-ocean-500 disabled:opacity-60 dark:border-ocean-900 dark:bg-ocean-950">
-              <span className="block text-sm font-semibold text-ocean-800 dark:text-ocean-100">Create lysozyme tutorial demo</span>
+            <button type="button" disabled={busy} onClick={() => createExample("lysozyme")} className="rounded-lg border border-ocean-200 bg-ocean-50 px-4 py-3 text-left transition hover:border-ocean-500 disabled:opacity-60 dark:border-ocean-900 dark:bg-ocean-950">
+              <span className="block text-sm font-semibold text-ocean-800 dark:text-ocean-100">Create lysozyme tutorial example</span>
               <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">Preset from the classic GROMACS lysozyme tutorial workflow.</span>
             </button>
-            <button type="button" disabled={busy} onClick={() => createDemo("small-molecule")} className="rounded-lg border border-mint-200 bg-mint-50 px-4 py-3 text-left transition hover:border-mint-500 disabled:opacity-60 dark:border-mint-900 dark:bg-mint-950">
-              <span className="block text-sm font-semibold text-mint-800 dark:text-mint-100">Create small molecule demo</span>
+            <button type="button" disabled={busy} onClick={() => createExample("small-molecule")} className="rounded-lg border border-mint-200 bg-mint-50 px-4 py-3 text-left transition hover:border-mint-500 disabled:opacity-60 dark:border-mint-900 dark:bg-mint-950">
+              <span className="block text-sm font-semibold text-mint-800 dark:text-mint-100">Create small molecule example</span>
               <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">Fast validation setup using the built-in ligand-style sample.</span>
             </button>
           </div>
@@ -740,7 +740,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, par
         </section>
         <section className="min-h-0 flex-1 rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-base font-semibold">Generated Config</h3>
+            <h3 className="text-base font-semibold">Configuration Preview</h3>
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">live preview</span>
           </div>
           <pre className="h-[calc(100%-36px)] min-h-96 overflow-auto rounded-lg bg-slate-950 p-4 font-mono text-xs leading-5 text-mint-100">{configPreview}</pre>
@@ -990,7 +990,7 @@ function ResultsView({ cancelRun, configureNextStep, job, logs, notify, renameRu
               <p className="text-sm text-slate-500 dark:text-slate-400">{job.upload.originalName}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className={job.executionMode === "development-fallback" ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200" : "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"}>
+              <span className={job.executionMode === "validation-mode" ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200" : "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"}>
                 {executionModeLabel(job.executionMode)}
               </span>
               <span className={statusClass(job.status)}>{job.status}</span>
@@ -1871,11 +1871,11 @@ function stepName(key: StepKey): string {
 
 function executionModeLabel(mode: string): string {
   if (!mode || mode === "unknown") return "GROMACS";
-  if (mode === "development-fallback") return "Demo/fallback";
+  if (mode === "validation-mode") return "Validation mode";
   if (mode.includes("2026.2")) return "GROMACS 2026.2";
   if (mode.includes("native-opencl")) return "GROMACS OpenCL";
   if (mode.includes("cuda")) return "GROMACS CUDA";
-  return mode.replace(/^real-gromacs:.*/, "GROMACS");
+  return mode;
 }
 
 type RunGroup = {
@@ -2012,7 +2012,7 @@ function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordin
   const input = upload?.originalName ?? "<select-or-upload-coordinate-file>";
   const useGpu = parameters.useGpu && gpuAvailable;
   const prefix = [
-    "# GROWebby generated GROMACS workflow preview",
+    "# GROWebby GROMACS workflow preview",
     `# run_name = ${parameters.runName || "<unnamed-run>"}`,
     `# run_mode = ${parameters.runMode}`,
     `# input = ${input}`,

@@ -55,14 +55,14 @@ class SimulationOwnershipTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["results"]), 2)
 
-    def test_demo_setup_creates_owned_upload_and_parameters(self):
+    def test_example_setup_creates_owned_upload_and_parameters(self):
         self.client.force_login(self.alice)
-        response = self.client.post("/api/demos/lysozyme/")
+        response = self.client.post("/api/examples/lysozyme/")
         self.assertEqual(response.status_code, 201)
         payload = response.json()
         self.assertEqual(payload["upload"]["owner"], "alice")
-        self.assertEqual(payload["parameters"]["demoName"], "Lysozyme tutorial demo")
-        self.assertTrue(UploadedCoordinate.objects.filter(original_name="lysozyme-tutorial-demo.pdb", owner=self.alice).exists())
+        self.assertEqual(payload["parameters"]["exampleName"], "Lysozyme tutorial example")
+        self.assertTrue(UploadedCoordinate.objects.filter(original_name="lysozyme-tutorial-example.pdb", owner=self.alice).exists())
 
     def test_owner_can_delete_run(self):
         upload = UploadedCoordinate.objects.create(owner=self.alice, original_name="alice.pdb", file=SimpleUploadedFile("alice.pdb", PDB_BYTES), size=len(PDB_BYTES))

@@ -18,15 +18,15 @@
 
 # GROWebby
 
-> **A local, Dockerized web interface for running GROMACS molecular dynamics simulations from your browser.**
+> **A local, Dockerized web interface for GROMACS molecular dynamics workflows.**
 
-GROWebby brings a professional web UI to your local GROMACS installation. Instead of writing shell scripts or chasing MDP files across your filesystem, you upload a coordinate file, click through the pipeline stages, launch the simulation, and watch live energy and temperature charts from a single browser tab. Each user gets a private, isolated workspace. Admins control who gets access.
+GROWebby provides a web interface for local GROMACS installations. Users upload a coordinate file, configure pipeline stages, launch simulations, inspect intermediate files, and review live metrics from a single browser session. Each user has an isolated workspace, and administrators control access.
 
 ---
 
 ## What is GROWebby?
 
-GROMACS is the gold standard for biomolecular simulation, but setting up and running a full MD pipeline typically requires comfort with the Linux command line, MDP files, and careful management of intermediate outputs. GROWebby abstracts that away:
+GROMACS is widely used for biomolecular simulation, but setting up and running a full MD pipeline requires command-line work, MDP file management, and careful handling of intermediate outputs. GROWebby provides a structured interface for these tasks:
 
 - **Upload** a `.pdb`, `.gro`, `.cif`, or `.mol2` coordinate file from the Files tab.
 - **Configure** each stage of the pipeline through a guided, form-based UI: force fields, box geometry, solvation, ion concentrations, energy minimization, NVT, NPT, and production runtime.
@@ -42,16 +42,16 @@ Everything runs on your local machine inside Docker. Your data never leaves your
 
 | Feature | Details |
 |---------|---------|
-| 🔬 Multi-stage MD pipeline | Topology -> Box -> Solvation -> Ions -> Minimize -> NVT -> NPT -> Production |
-| 🧬 3D structure viewer | Embedded MolStar viewer, dark/light mode aware |
-| 📊 Live simulation metrics | Real-time energy, temperature, and pressure charts |
-| 👥 Multi-user workspaces | Each user has isolated files, runs, and results |
-| 🛡️ Admin approval workflow | New registrations are inactive until an admin approves them |
-| 🌙 Dark / light mode | Persisted preference with full dark-mode UI compatibility |
-| 🔗 URL routing | Every page has its own URL — refresh doesn't reset you |
-| 📱 Responsive layout | Collapsing sidebar, mobile navigation bar |
-| 🗂 Simulation history | Browse, inspect, and re-open previous runs |
-| ⏹️ Run cancellation | Active GROMACS child process PID is stored and can be terminated from the Results page |
+| Multi-stage MD pipeline | Topology -> Box -> Solvation -> Ions -> Minimize -> NVT -> NPT -> Production |
+| 3D structure viewer | Embedded MolStar viewer, dark/light mode aware |
+| Live simulation metrics | Real-time energy, temperature, and pressure charts |
+| Multi-user workspaces | Each user has isolated files, runs, and results |
+| Admin approval workflow | New registrations are inactive until an admin approves them |
+| Dark / light mode | Persisted preference with full dark-mode UI compatibility |
+| URL routing | Every page has its own URL and can be refreshed directly |
+| Responsive layout | Collapsing sidebar and mobile navigation |
+| Simulation history | Browse, inspect, and re-open previous runs |
+| Run cancellation | Active GROMACS child process PID is stored and can be terminated from the Results page |
 
 ---
 
@@ -70,7 +70,7 @@ Large files are stored on disk under `backend/media/`, not inside the database. 
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/yourorg/growebby.git
+git clone <repository-url>
 cd growebby
 ./install.sh   # detects the execution engine and writes .env
 ./start.sh     # starts all services
@@ -79,7 +79,7 @@ cd growebby
 ### Windows
 
 ```bat
-git clone https://github.com/yourorg/growebby.git
+git clone <repository-url>
 cd growebby
 start.bat
 ```
@@ -164,7 +164,7 @@ growebby/
 # Create local environment configuration once
 cp .env.example .env
 
-# Start all containers with live reload
+# Start the application
 docker compose up
 
 # Apply Django database migrations
@@ -191,7 +191,7 @@ Important settings:
 - `GROWEBBY_ENGINE=docker-backend-cpu` runs GROMACS 2026.2 inside Docker with CPU/OpenMP support.
 - `GROMACS_EXECUTION_MODE=backend-gmx-2026.2` is shown in health checks and run metadata.
 - `GROMACS_BINARY=/usr/local/gromacs/bin/gmx` is the backend container path.
-- `GROWEBBY_ALLOW_DEMO_RUNS=0` keeps runs on the real GROMACS path. Set it to `1` only for UI development without a GROMACS executable.
+- `GROWEBBY_ALLOW_VALIDATION_RUNS=0` keeps runs on the real GROMACS path. Set it to `1` only for interface validation without a GROMACS executable.
 
 `docker-compose.yml` uses these values through environment interpolation, so debug mode is controlled by `.env`, not hardcoded in Compose.
 

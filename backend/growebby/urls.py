@@ -41,7 +41,7 @@ def health(_request):
             "service": "growebby-backend",
             "engine": {
                 "selected": os.environ.get("GROWEBBY_ENGINE", "unconfigured"),
-                "executionMode": os.environ.get("GROMACS_EXECUTION_MODE", "development-fallback"),
+                "executionMode": os.environ.get("GROMACS_EXECUTION_MODE", "unconfigured"),
                 "gromacsBinary": os.environ.get("GROMACS_BINARY", ""),
                 "gpuAvailable": has_gpu,
                 "gpuBackend": "OpenCL" if has_gpu and "native-opencl" in os.environ.get("GROMACS_EXECUTION_MODE", "") else "CUDA" if has_gpu else "none",

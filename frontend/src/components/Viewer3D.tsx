@@ -15,7 +15,7 @@ export function Viewer3D({ coordinateUrl, dark }: Props) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Use the dark prop if provided, otherwise fallback to DOM checking
+    // Prefer the explicit theme prop; otherwise infer the document theme.
     const isDarkMode = dark ?? (document.documentElement.classList.contains("dark") || 
                        window.matchMedia("(prefers-color-scheme: dark)").matches);
     
@@ -60,7 +60,7 @@ export function Viewer3D({ coordinateUrl, dark }: Props) {
         ...renderOptions,
         moleculeId: "1crn"
       };
-      setStatus("Loading demo molecule...");
+      setStatus("Loading structure...");
       viewerRef.current.render(containerRef.current, options);
       setStatus("");
     }
