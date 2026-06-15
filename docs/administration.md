@@ -105,5 +105,5 @@ Recommended production hardening:
 - Restrict `DJANGO_ALLOWED_HOSTS`.
 - Use HTTPS in front of the backend.
 - Use a persistent database service instead of local SQLite.
-- Back up media workspaces and the database.
+- Back up `.app_state/media/` and `backend/db.sqlite3`.
 - Rotate admin credentials when sharing a machine.

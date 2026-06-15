@@ -29,7 +29,7 @@ The database stores:
 - Clean event logs shown in the UI.
 - Artifact metadata, including file name, kind, relative path, and browser URL.
 
-Large binary and text artifacts are not stored in SQLite. They are stored under `backend/media/`, including uploads, generated configs, structures, trajectories, `.edr` files, `.xvg` analysis files, and full GROMACS command logs.
+Large binary and text artifacts are not stored in SQLite. They are stored under `.app_state/media/`, including uploads, generated configs, structures, trajectories, `.edr` files, `.xvg` analysis files, and full GROMACS command logs.
 
 ## Service Layout
 
@@ -61,7 +61,19 @@ The default active path on Apple Silicon without native GROMACS is `docker-backe
 Run files are stored under:
 
 ```text
-backend/media/workspaces/<run-workspace-slug>/
+<project-root>/.app_state/media/workspaces/<run-workspace-slug>/
+```
+
+Docker mounts the same host directory into the backend container at:
+
+```text
+/app/media/workspaces/<run-workspace-slug>/
+```
+
+Standalone GROMACS engine containers mount the same host directory at:
+
+```text
+/work/workspaces/<run-workspace-slug>/
 ```
 
 Typical contents:

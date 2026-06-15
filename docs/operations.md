@@ -88,6 +88,36 @@ Full GROMACS stdout/stderr is captured separately for each command and written i
 
 Simulation plots update while `mdrun` is active. During long runs, GROWebby publishes lightweight live progress points first and replaces them with extracted GROMACS energy data after `.edr` frames become readable.
 
+## Physical Results Storage
+
+For Docker-based runs, uploads and results are stored on the host at:
+
+```text
+<project-root>/.app_state/media/
+```
+
+Run workspaces are stored at:
+
+```text
+<project-root>/.app_state/media/workspaces/<run-workspace-slug>/
+```
+
+Docker mounts this directory into the backend container as:
+
+```text
+/app/media
+/app/media/workspaces
+```
+
+The GROMACS engine containers mount the same directory as:
+
+```text
+/work
+/work/workspaces
+```
+
+For the native macOS OpenCL backend path, the backend uses the same host directory directly.
+
 ## Cancelling Runs
 
 Use Cancel run on the Results page for queued or running jobs. While a GROMACS command is active, the backend stores the child process PID in the database and sends `SIGTERM` to that process group when cancellation is requested.

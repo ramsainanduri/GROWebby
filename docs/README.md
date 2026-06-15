@@ -9,6 +9,7 @@ This folder contains the operating and user documentation for GROWebby.
 - [Administration and Access Control](administration.md): accounts, approvals, groups, and admin operations.
 - [Architecture](architecture.md): application services, data flow, execution engines, and storage layout.
 - [Operations and Troubleshooting](operations.md): startup, health checks, GPU modes, logs, and common failures.
+- [Contributing](../CONTRIBUTING.md): development standards, checks, and pull request guidance.
 
 ## Current Execution Model
 
@@ -24,4 +25,12 @@ That means runs execute real GROMACS 2026.2 inside the backend Docker container,
 
 ## Current Storage
 
-GROWebby currently uses SQLite at `backend/db.sqlite3` for users, uploads, simulation jobs, status, metrics, event logs, artifact metadata, run grouping, and the active process PID used for cancellation. Run files themselves live under `backend/media/`.
+GROWebby currently uses SQLite at `backend/db.sqlite3` for users, uploads, simulation jobs, status, metrics, event logs, artifact metadata, run grouping, and the active process PID used for cancellation.
+
+Run files are stored on the host under:
+
+```text
+<project-root>/.app_state/media/workspaces/<run-workspace-slug>/
+```
+
+Docker mounts the same storage into the backend at `/app/media/workspaces` and into GROMACS engine containers at `/work/workspaces`.
