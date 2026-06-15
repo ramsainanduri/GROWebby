@@ -58,8 +58,8 @@ export function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dar
         <div className="absolute inset-0 opacity-[0.04]" style={{backgroundImage: "linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)", backgroundSize: "48px 48px"}} />
 
         <div className="relative flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-ocean-500/20 ring-1 ring-ocean-400/30">
-            <Network className="text-ocean-300" size={22} />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white p-1.5 ring-1 ring-ocean-400/30">
+            <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight">GROWebby {versionInfo ? <span className="text-sm font-medium text-slate-400">v{versionInfo.version}</span> : null}</h1>
@@ -68,14 +68,11 @@ export function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dar
         </div>
 
         <div className="relative max-w-xl">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-cyan-300">
-            <Sparkles size={12} /> Local · Docker · GROMACS
-          </div>
           <h2 className="text-4xl font-bold leading-tight tracking-tight xl:text-5xl">
             Run molecular dynamics from your browser.
           </h2>
           <p className="mt-4 text-base leading-relaxed text-slate-400">
-            Configure every stage of your GROMACS pipeline, monitor live metrics, and download results — all in one place.
+            Configure every stage of your GROMACS pipeline, monitor live metrics, and download results - all in one place.
           </p>
         </div>
 
@@ -101,8 +98,8 @@ export function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dar
           {/* Mobile logo */}
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-2.5 lg:hidden">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-ocean-100 text-ocean-700 dark:bg-ocean-900 dark:text-ocean-300">
-                <Network size={18} />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white p-1">
+                <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
               </div>
               <span className="font-bold">GROWebby {versionInfo ? <span className="text-xs font-medium text-slate-500">v{versionInfo.version}</span> : null}</span>
             </div>
@@ -126,8 +123,8 @@ export function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dar
 
           {registered ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-800 dark:bg-emerald-950">
-              <CheckCircle2 className="mb-2 text-emerald-600 dark:text-emerald-400" size={22} />
-              <p className="font-semibold text-emerald-800 dark:text-emerald-200">Registration submitted!</p>
+              <img src="/logo.svg" alt="GROWebby Logo" className="mx-auto mb-6 h-14 w-14 object-contain" />
+-             <p className="font-semibold text-emerald-800 dark:text-emerald-200">Registration submitted!</p>
               <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">{registered}</p>
               <button type="button" onClick={() => switchMode("login")} className="mt-4 text-sm font-medium text-emerald-700 underline dark:text-emerald-300">Back to sign in</button>
             </div>

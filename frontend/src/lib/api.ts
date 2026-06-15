@@ -80,6 +80,12 @@ export type AdminUser = {
   isSuperuser: boolean;
   dateJoined: string;
   purpose: string;
+  groups: string[];
+};
+
+export type AdminGroup = {
+  id: number;
+  name: string;
 };
 
 export type HealthState = {
@@ -92,7 +98,20 @@ export type HealthState = {
     gpuAvailable?: boolean;
     gpuBackend?: string;
   };
-};
+}
+
+export type GromacsOptions = {
+  forceFields: { value: string; label: string }[];
+  waterModels: { value: string; label: string }[];
+  boxTypes: { value: string; label: string }[];
+  minimizers: { value: string; label: string }[];
+  thermostats: { value: string; label: string }[];
+  barostats: { value: string; label: string }[];
+  constraints: { value: string; label: string }[];
+  integrators: { value: string; label: string }[];
+  coulombTypes: { value: string; label: string }[];
+  vdwTypes: { value: string; label: string }[];
+};;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
@@ -110,6 +129,10 @@ export async function parseResponse<T>(response: Response): Promise<T> {
 
 export async function getHealth(): Promise<HealthState> {
   return parseResponse<HealthState>(await fetch(`${API_BASE}/health/`));
+}
+
+export async function getGromacsOptions(): Promise<GromacsOptions> {
+  return parseResponse<GromacsOptions>(await fetch(`${API_BASE}/gromacs-options/`));
 }
 
 function csrfToken(): string {
@@ -265,8 +288,8 @@ export async function adminApproveUser(userId: number): Promise<{ id: number; is
   return parseResponse(response);
 }
 
-export async function adminDenyUser(userId: number): Promise<{ deleted: boolean }> {
-  const response = await apiFetch(`/auth/admin/users/${userId}/deny/`, { method: "POST" });
+export async function adminDeleteUser(userId: number): Promise<{ deleted: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/delete/`, { method: "POST" });
   return parseResponse(response);
 }
 
@@ -295,4 +318,39 @@ export async function adminResetUserPassword(userId: number, data: any): Promise
     body: JSON.stringify(data)
   });
   return parseResponse(response);
+}
+
+export async function adminListGroups(): Promise<AdminGroup[]> {
+  const response = await apiFetch("/auth/admin/groups/");
+  const data = await parseResponse<{ groups: AdminGroup[] }>(response);
+  return data.groups;
+}
+
+export async function adminCreateGroup(name: string): Promise<AdminGroup & { created: boolean }> {
+  const response = await apiFetch("/auth/admin/groups/create/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  return parseResponse(response);
+}
+
+export async function adminUpdateGroup(groupId: number, name: string): Promise<AdminGroup & { updated: boolean }> {
+  const response = await apiFetch(`/auth/admin/groups/${groupId}/update/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  return parseResponse(response);
+}
+
+export async function adminDeleteGroup(groupId: number): Promise<{ deleted: boolean }> {
+  const response = await apiFetch(`/auth/admin/groups/${groupId}/delete/`, { method: "POST" });
+  return parseResponse(response);
+}
+
+export async function adminListAllSimulations(): Promise<SimulationJob[]> {
+  const response = await apiFetch("/simulations/admin/all/");
+  const data = await parseResponse<{ results: SimulationJob[] }>(response);
+  return data.results;
 }

@@ -8,15 +8,14 @@ User = get_user_model()
 @receiver(post_save, sender=User)
 def sync_user_groups(sender, instance, created, **kwargs):
     """
-    Ensure the user is assigned to the correct group based on their superuser status.
-    If they are a superuser, they belong to the 'admin' group.
-    If they are not a superuser, they belong to the 'user' group.
+    Assign users to the default group based on their initial superuser status
+    only when the user is created. This allows manual group assignments later.
     """
+    if not created:
+        return
+
     admin_group, _ = Group.objects.get_or_create(name='admin')
     user_group, _ = Group.objects.get_or_create(name='user')
-
-    # Remove from both groups first to ensure clean state
-    instance.groups.remove(admin_group, user_group)
 
     if instance.is_superuser:
         instance.groups.add(admin_group)
@@ -24,7 +23,5 @@ def sync_user_groups(sender, instance, created, **kwargs):
         if not instance.is_staff:
             User.objects.filter(pk=instance.pk).update(is_staff=True)
     else:
-        # Only active non-superusers belong to the 'user' group
-        # If they are pending approval (is_active=False), they might not have any group yet,
-        # but assigning them to 'user' is fine as long as they can't login anyway.
+        # Only active non-superusers belong to the 'user' group initially
         instance.groups.add(user_group)

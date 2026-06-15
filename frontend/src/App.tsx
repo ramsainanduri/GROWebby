@@ -26,7 +26,9 @@ import {
   SimulationJob,
   SessionState,
   UploadedCoordinate,
-  uploadCoordinate
+  uploadCoordinate,
+  getGromacsOptions,
+  GromacsOptions
 } from "./lib/api";
 
 import { makeRunName, normalizeRunParameters, upsertRun } from "./lib/utils";
@@ -71,6 +73,7 @@ function MainApp() {
   const [notifications, setNotifications] = useState<{ id: number; tone: "success" | "error" | "info"; message: string }[]>([]);
   const [versionInfo, setVersionInfo] = useState<{ version: string; buildDate: string; tools: Record<string, string> } | null>(null);
   const [health, setHealth] = useState<HealthState | null>(null);
+  const [gmxOptions, setGmxOptions] = useState<GromacsOptions | null>(null);
   const [session, setSession] = useState<SessionState>({ isAuthenticated: false, user: null });
   const [sessionChecked, setSessionChecked] = useState(false);
 
@@ -82,6 +85,9 @@ function MainApp() {
       .catch(() => undefined);
     getHealth()
       .then(setHealth)
+      .catch(() => undefined);
+    getGromacsOptions()
+      .then(setGmxOptions)
       .catch(() => undefined);
   }, []);
 
@@ -310,8 +316,8 @@ function MainApp() {
     <main className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 transition dark:bg-slate-950 dark:text-slate-100">
       <aside className={`${navCollapsed ? "w-[4.5rem]" : "w-[15.5rem] 2xl:w-[16.25rem]"} hidden shrink-0 border-r border-slate-200 bg-white transition-all dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col`}>
         <div className={`flex h-14 2xl:h-16 items-center border-b border-slate-200 dark:border-slate-800 ${navCollapsed ? "justify-center px-2" : "gap-2.5 px-3"}`}>
-          <div className="flex h-9 w-9 items-center justify-center text-ocean-600 dark:text-ocean-400 2xl:h-10 2xl:w-10">
-            <Atom size="1.35em" />
+          <div className="flex h-9 w-9 items-center justify-center 2xl:h-10 2xl:w-10">
+            <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
           </div>
           {!navCollapsed && (
             <div className="min-w-0">
@@ -356,8 +362,8 @@ function MainApp() {
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 2xl:h-16 2xl:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="lg:hidden flex h-9 w-9 items-center justify-center text-ocean-600 dark:text-ocean-400">
-              <Atom size="1.35em" />
+            <div className="lg:hidden flex h-9 w-9 items-center justify-center">
+              <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold 2xl:text-lg">{navItems.find((item) => item.key === view)?.label}</h2>
@@ -409,7 +415,7 @@ function MainApp() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} createExample={createExample} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} busy={busy} />} />
-            <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} health={health} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} />} />
+            <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} health={health} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} gmxOptions={gmxOptions} />} />
             <Route path="/files" element={<FilesView handleFile={handleFile} selectUpload={setUpload} upload={upload} uploads={uploads} />} />
             <Route path="/runs" element={<RunsView job={job} runs={runs} removeRun={removeRun} selectRun={selectRun} />} />
             <Route path="/results" element={<ResultsView cancelRun={cancelRun} configureNextStep={configureNextStepFromRun} job={job} logs={logs} notify={notify} renameRun={renameRun} selectRun={selectRun} dark={dark} />} />

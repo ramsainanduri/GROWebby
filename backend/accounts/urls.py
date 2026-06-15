@@ -13,5 +13,10 @@ urlpatterns = [
     path("admin/users/<int:user_id>/update/", views.admin_update_user),
     path("admin/users/<int:user_id>/reset-password/", views.admin_reset_user_password),
     path("admin/users/<int:user_id>/approve/", views.admin_approve_user),
-    path("admin/users/<int:user_id>/deny/", views.admin_deny_user),
+    path("admin/users/<int:user_id>/delete/", views.admin_delete_user),
+    # Admin Group endpoints
+    path("admin/groups/", views.admin_list_groups),
+    path("admin/groups/create/", views.admin_create_group),
+    path("admin/groups/<int:group_id>/update/", views.admin_update_group),
+    path("admin/groups/<int:group_id>/delete/", views.admin_delete_group),
 ]

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0]
 
 ### Added
+- Designed and integrated a scalable SVG vector logo (isometric simulation box) across the application interface and as the native favicon.
+- Added a new backend API endpoint `/api/gromacs-options/` to dynamically expose engine-supported parameters.
 - Rebuilt Admin UI natively in the frontend for managing users without relying on the Django Admin panel.
 - In-app CRUD capabilities to create users, toggle admin privileges, and reset passwords.
 - Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Re-architected CUDA execution environment: downgraded base to CUDA 12.0.1 for broad host driver compatibility.
+- GROMACS configuration menus in the Workflow UI are now dynamically populated from the backend engine instead of using hardcoded lists.
+- Updated documentation with clear guidelines for managing fine-grained group permissions via the standard Django Admin interface.
 - Professionalized application documentation and removed informal system logs.
 - Consolidated hardware engine profiling and error recovery for container environments.
 - Restored frontend utility and API abstractions after UI component decoupling.

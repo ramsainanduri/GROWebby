@@ -1,5 +1,5 @@
 import { Atom, Boxes, FlaskConical, Gauge, Network, Play, Rocket, Scale, Sparkles, UploadCloud, Waves } from "lucide-react";
-import { SimulationJob, UploadedCoordinate } from "../lib/api";
+import { SimulationJob, UploadedCoordinate, GromacsOptions } from "../lib/api";
 import { defaults, StepKey, steps } from "../types";
 import { Viewer3D } from "../components/Viewer3D";
 import { StatusDatum } from "../components/ui";
@@ -22,14 +22,15 @@ interface WorkflowProps {
   uploads: UploadedCoordinate[];
   selectUpload: (upload: UploadedCoordinate) => void;
   dark: boolean;
+  gmxOptions: GromacsOptions | null;
 }
 
-function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { activeStep: StepKey; gpuAvailable: boolean; parameters: typeof defaults; setParameters: (parameters: typeof defaults) => void }) {
+function StepOptions({ activeStep, gpuAvailable, parameters, setParameters, gmxOptions }: { activeStep: StepKey; gpuAvailable: boolean; parameters: typeof defaults; setParameters: (parameters: typeof defaults) => void, gmxOptions: GromacsOptions | null }) {
   if (activeStep === "topology") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
-        <SelectField label="Force field" help="Passed to gmx pdb2gmx with -ff. Choose the force field that matches your molecule and intended protocol." value={parameters.forceField} options={["amber99sb-ildn", "charmm27", "oplsaa", "gromos54a7"]} onChange={(value) => setParameters({ ...parameters, forceField: value })} />
-        <SelectField label="Water model" help="Passed to pdb2gmx with -water. Keep this compatible with the selected force field." value={parameters.waterModel} options={["tip3p", "spce", "tip4p", "tip5p"]} onChange={(value) => setParameters({ ...parameters, waterModel: value })} />
+        <SelectField label="Force field" help="Passed to gmx pdb2gmx with -ff. Choose the force field that matches your molecule and intended protocol." value={parameters.forceField} options={gmxOptions?.forceFields || ["amber99sb-ildn", "charmm27", "oplsaa", "gromos54a7"]} onChange={(value) => setParameters({ ...parameters, forceField: value })} />
+        <SelectField label="Water model" help="Passed to pdb2gmx with -water. Keep this compatible with the selected force field." value={parameters.waterModel} options={gmxOptions?.waterModels || ["tip3p", "spce", "tip4p", "tip5p"]} onChange={(value) => setParameters({ ...parameters, waterModel: value })} />
         <SelectField label="Termini handling" value={parameters.termini} options={["interactive", "charged", "neutral"]} onChange={(value) => setParameters({ ...parameters, termini: value })} />
         <ToggleField label="Ignore input hydrogens" checked={parameters.ignoreHydrogens} onChange={(value) => setParameters({ ...parameters, ignoreHydrogens: value })} />
       </div>
@@ -39,7 +40,7 @@ function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { 
   if (activeStep === "box") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
-        <SelectField label="Box type" help="Passed to gmx editconf with -bt. Dodecahedron is compact for solvated globular proteins." value={parameters.boxType} options={["dodecahedron", "cubic", "triclinic", "octahedron"]} onChange={(value) => setParameters({ ...parameters, boxType: value })} />
+        <SelectField label="Box type" help="Passed to gmx editconf with -bt. Dodecahedron is compact for solvated globular proteins." value={parameters.boxType} options={gmxOptions?.boxTypes || ["dodecahedron", "cubic", "triclinic", "octahedron"]} onChange={(value) => setParameters({ ...parameters, boxType: value })} />
         <Slider label="Molecule distance" help="Passed to editconf with -d. This is the minimum solute-to-box-edge distance in nm." value={parameters.distanceNm} min={0.6} max={2.5} step={0.1} suffix="nm" onChange={(value) => setParameters({ ...parameters, distanceNm: value })} />
         <ToggleField label="Center molecule in box" checked={parameters.centerMolecule} onChange={(value) => setParameters({ ...parameters, centerMolecule: value })} />
       </div>
@@ -70,7 +71,7 @@ function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { 
   if (activeStep === "minimize") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
-        <SelectField label="Integrator" value={parameters.minimizer} options={["steep", "cg", "l-bfgs"]} onChange={(value) => setParameters({ ...parameters, minimizer: value })} />
+        <SelectField label="Integrator" value={parameters.minimizer} options={gmxOptions?.minimizers || ["steep", "cg", "l-bfgs"]} onChange={(value) => setParameters({ ...parameters, minimizer: value })} />
         <NumberField label="Maximum steps" value={parameters.minimizationSteps} min={100} step={1000} onChange={(value) => setParameters({ ...parameters, minimizationSteps: value })} />
         <NumberField label="Energy tolerance" help="MDP emtol. Minimization stops when the maximum force is below this threshold." value={parameters.emtol} min={10} step={100} onChange={(value) => setParameters({ ...parameters, emtol: value })} />
         <Slider label="Initial step size" value={parameters.emstep} min={0.001} max={0.05} step={0.001} suffix="nm" onChange={(value) => setParameters({ ...parameters, emstep: value })} />
@@ -83,8 +84,8 @@ function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { 
       <div className="grid gap-4 xl:grid-cols-2">
         <Slider label="NVT length" help="Constant-volume equilibration duration. The generated nvt.mdp uses position restraints by default." value={parameters.nvtPs} min={10} max={1000} step={10} suffix="ps" onChange={(value) => setParameters({ ...parameters, nvtPs: value })} />
         <Slider label="Temperature" help="MDP ref_t in Kelvin for temperature coupling." value={parameters.temperature} min={250} max={360} step={1} suffix="K" onChange={(value) => setParameters({ ...parameters, temperature: value })} />
-        <SelectField label="Thermostat" help="MDP tcoupl. V-rescale is a common equilibration thermostat for biomolecular tutorials." value={parameters.thermostat} options={["V-rescale", "Berendsen", "Nose-Hoover", "no"]} onChange={(value) => setParameters({ ...parameters, thermostat: value })} />
-        <SelectField label="Constraints" help="MDP constraints. Hydrogen-bond constraints allow a 2 fs timestep in many standard workflows." value={parameters.constraints} options={["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
+        <SelectField label="Thermostat" help="MDP tcoupl. V-rescale is a common equilibration thermostat for biomolecular tutorials." value={parameters.thermostat} options={gmxOptions?.thermostats || ["V-rescale", "Berendsen", "Nose-Hoover", "no"]} onChange={(value) => setParameters({ ...parameters, thermostat: value })} />
+        <SelectField label="Constraints" help="MDP constraints. Hydrogen-bond constraints allow a 2 fs timestep in many standard workflows." value={parameters.constraints} options={gmxOptions?.constraints || ["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
       </div>
     );
   }
@@ -95,7 +96,7 @@ function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { 
         <Slider label="NPT length" help="Constant-pressure equilibration duration. This stage is where density should settle." value={parameters.nptPs} min={10} max={1000} step={10} suffix="ps" onChange={(value) => setParameters({ ...parameters, nptPs: value })} />
         <Slider label="Pressure" help="MDP ref_p in bar for pressure coupling." value={parameters.pressure} min={0.5} max={2} step={0.1} suffix="bar" onChange={(value) => setParameters({ ...parameters, pressure: value })} />
         <Slider label="Target density" help="Analysis reference for density plots in kg/m^3. Water near room temperature is close to 1000 kg/m^3." value={parameters.targetDensity} min={850} max={1150} step={5} suffix="kg/m3" onChange={(value) => setParameters({ ...parameters, targetDensity: value })} />
-        <SelectField label="Barostat" value={parameters.barostat} options={["Parrinello-Rahman", "Berendsen", "C-rescale", "no"]} onChange={(value) => setParameters({ ...parameters, barostat: value })} />
+        <SelectField label="Barostat" value={parameters.barostat} options={gmxOptions?.barostats || ["Parrinello-Rahman", "Berendsen", "C-rescale", "no"]} onChange={(value) => setParameters({ ...parameters, barostat: value })} />
       </div>
     );
   }
@@ -105,13 +106,13 @@ function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { 
       <Slider label="Production length" help="Converted into production.mdp nsteps using length / dt." value={parameters.productionNs} min={0.1} max={100} step={0.1} suffix="ns" onChange={(value) => setParameters({ ...parameters, productionNs: value })} />
       <Slider label="Time step" help="MDP dt in ps. 0.002 ps is a common value when constraining bonds to hydrogen." value={parameters.dt} min={0.001} max={0.004} step={0.001} suffix="ps" onChange={(value) => setParameters({ ...parameters, dt: value })} />
       <Slider label="Output interval" value={parameters.outputEveryPs} min={1} max={100} step={1} suffix="ps" onChange={(value) => setParameters({ ...parameters, outputEveryPs: value })} />
-      <SelectField label="Constraints" value={parameters.constraints} options={["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
+      <SelectField label="Constraints" value={parameters.constraints} options={gmxOptions?.constraints || ["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
       <ToggleField label={gpuAvailable ? "Request GPU acceleration" : "GPU unavailable in current engine"} checked={gpuAvailable && parameters.useGpu} disabled={!gpuAvailable} onChange={(value) => setParameters({ ...parameters, useGpu: value })} />
     </div>
   );
 }
 
-export function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, parameters, setActiveStep, setParameters, startSimulation, upload, uploads, selectUpload, dark }: WorkflowProps) {
+export function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, parameters, setActiveStep, setParameters, startSimulation, upload, uploads, selectUpload, dark, gmxOptions }: WorkflowProps) {
   const selectedStep = steps[activeStep];
   const gpuAvailable = Boolean(health?.engine?.gpuAvailable);
   const configPreview = buildConfigPreview(parameters, upload, gpuAvailable);
@@ -183,7 +184,7 @@ export function WorkflowView({ activeStep, busy, canStart, handleFile, health, j
               Current step: <span className="font-semibold text-slate-900 dark:text-white">{selectedStep.name}</span>. Run only this step, configure the next step, or launch the complete pipeline from topology through production.
             </div>
           </div>
-          <StepOptions activeStep={selectedStep.key} gpuAvailable={gpuAvailable} parameters={parameters} setParameters={setParameters} />
+          <StepOptions activeStep={selectedStep.key} gpuAvailable={gpuAvailable} parameters={parameters} setParameters={setParameters} gmxOptions={gmxOptions} />
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">

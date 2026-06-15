@@ -70,9 +70,15 @@ Uploads and runs have an owner. Regular users can see:
 
 Staff users can see all uploads and runs.
 
-## Groups
+## Groups and Permissions
 
-Groups provide a path for team or lab visibility. Assign users and records to Django groups when a project should be shared by a defined set of users.
+Groups provide a path for team or lab visibility. While GROWebby's custom web UI provides basic hooks and views for group management, **full group creation and fine-grained permission assignments must be managed via the Django Admin interface**.
+
+To configure what each group is allowed to do:
+1. Navigate to the Django Admin interface (`http://localhost:8000/admin/`).
+2. Go to **Authentication and Authorization > Groups**.
+3. Create new groups (e.g., "Researchers", "Students") and use the interface to assign specific model permissions (add, change, delete) to control exactly what the group is allowed to do across the complete package.
+4. Add users to these groups.
 
 Recommended group practices:
 

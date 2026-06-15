@@ -52,8 +52,8 @@ export function AboutView() {
     <div className="grid max-w-3xl gap-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-ocean-100 text-ocean-600 dark:bg-ocean-900 dark:text-ocean-300">
-            <Network size={28} />
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-900 shadow-inner">
+            <img src="/logo.svg" alt="GROWebby Logo" className="h-10 w-10 object-contain" />
           </div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight">GROWebby</h2>

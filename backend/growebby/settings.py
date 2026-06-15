@@ -89,7 +89,7 @@ CSRF_TRUSTED_ORIGINS = [
 
 GROMACS_WORK_ROOT = Path(os.environ.get("GROMACS_WORK_ROOT", MEDIA_ROOT / "workspaces"))
 GROWEBBY_SERVE_MEDIA = os.environ.get("GROWEBBY_SERVE_MEDIA", "1") == "1"
-$a# Email Configuration
+# Email Configuration
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))

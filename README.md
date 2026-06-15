@@ -18,6 +18,10 @@
 
 # GROWebby
 
+<div align="center">
+  <img src="frontend/public/logo.svg" alt="GROWebby Logo" width="200" />
+</div>
+
 > **A Docker-based web interface for running GROMACS molecular dynamics simulations locally.**
 
 GROWebby is a local web interface for GROMACS. You can upload coordinate files, configure simulation parameters, run jobs, and view the results directly in your browser. Each user gets their own isolated workspace, and an admin panel controls access.
@@ -169,6 +173,8 @@ GROWebby uses a moderated sign-up flow to prevent unauthorized access:
 3. The admin opens the **Admin Panel** (`/admin`) and sees the pending request with the stated purpose.
 4. The admin clicks **Approve** or **Deny**.
 5. The approved user can now sign in normally.
+
+> **Note on Permissions**: While there are basic hooks in the Web UI for team visibility, to create groups and configure complete package permissions (defining exactly what each group is allowed to do), you should use the standard Django Admin interface (`/admin/` -> Authentication and Authorization -> Groups).
 
 ---
 

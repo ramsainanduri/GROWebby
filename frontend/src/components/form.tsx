@@ -29,18 +29,23 @@ export function Slider({ label, help, value, min, max, step, suffix, onChange }:
   );
 }
 
-export function SelectField({ label, help, value, options, onChange }: { label: string; help?: string; value: string; options: string[]; onChange: (value: string) => void }) {
+export function SelectField({ label, help, value, options, onChange }: { label: string; help?: string; value: string; options: {value: string, label: string}[] | string[]; onChange: (value: string) => void }) {
   return (
     <div className="mb-4">
       <label className="mb-1 flex items-center gap-1.5 text-sm font-medium">
         {label} {help && <InfoPopover title={label} body={help} />}
       </label>
       <select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700 dark:bg-slate-800">
-        {options.map(opt => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
+        {options.map(opt => {
+          const isStr = typeof opt === 'string';
+          const val = isStr ? opt : opt.value;
+          const lbl = isStr ? opt : opt.label;
+          return (
+            <option key={val} value={val}>
+              {lbl}
+            </option>
+          );
+        })}
       </select>
     </div>
   );

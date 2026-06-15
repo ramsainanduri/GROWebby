@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
@@ -147,7 +148,7 @@ def admin_users_list(request: HttpRequest) -> JsonResponse:
 
     User = get_user_model()
     users = []
-    for u in User.objects.select_related("profile").order_by("-date_joined"):
+    for u in User.objects.select_related("profile").prefetch_related("groups").order_by("-date_joined"):
         profile = getattr(u, "profile", None)
         users.append(
             {
@@ -159,6 +160,7 @@ def admin_users_list(request: HttpRequest) -> JsonResponse:
                 "isSuperuser": u.is_superuser,
                 "dateJoined": u.date_joined.isoformat(),
                 "purpose": profile.purpose if profile else "",
+                "groups": [g.name for g in u.groups.all()],
             }
         )
     return JsonResponse({"users": users})
@@ -194,7 +196,7 @@ def admin_approve_user(request: HttpRequest, user_id: int) -> JsonResponse:
 
 
 @require_POST
-def admin_deny_user(request: HttpRequest, user_id: int) -> JsonResponse:
+def admin_delete_user(request: HttpRequest, user_id: int) -> JsonResponse:
     err = _require_admin(request)
     if err:
         return err
@@ -224,6 +226,8 @@ def admin_create_user(request: HttpRequest) -> JsonResponse:
     email = str(body.get("email", "")).strip()
     password = str(body.get("password", ""))
     is_admin = bool(body.get("isAdmin", False))
+    is_active = bool(body.get("isActive", True))
+    group_names = body.get("groups")
 
     if not username or not email or len(password) < 8:
         return JsonResponse({"error": "Use a username, email, and password with at least 8 characters."}, status=400)
@@ -238,10 +242,14 @@ def admin_create_user(request: HttpRequest) -> JsonResponse:
         username=username,
         email=email,
         password=password,
-        is_active=True,
+        is_active=is_active,
         is_staff=is_admin,
         is_superuser=is_admin,
     )
+    if group_names is not None:
+        groups = Group.objects.filter(name__in=group_names)
+        user.groups.set(groups)
+    
     UserProfile.objects.create(user=user, purpose="Created by admin")
 
     return JsonResponse({"id": user.id, "created": True})
@@ -266,6 +274,8 @@ def admin_update_user(request: HttpRequest, user_id: int) -> JsonResponse:
 
     email = str(body.get("email", "")).strip()
     is_admin = body.get("isAdmin")
+    is_active = body.get("isActive")
+    group_names = body.get("groups")
 
     if email and email != u.email:
         if User.objects.filter(email=email).exclude(pk=user_id).exists():
@@ -276,6 +286,13 @@ def admin_update_user(request: HttpRequest, user_id: int) -> JsonResponse:
         is_admin_bool = bool(is_admin)
         u.is_staff = is_admin_bool
         u.is_superuser = is_admin_bool
+
+    if is_active is not None:
+        u.is_active = bool(is_active)
+
+    if group_names is not None:
+        groups = Group.objects.filter(name__in=group_names)
+        u.groups.set(groups)
 
     u.save()
     return JsonResponse({"id": u.id, "updated": True})
@@ -305,3 +322,79 @@ def admin_reset_user_password(request: HttpRequest, user_id: int) -> JsonRespons
     u.set_password(password)
     u.save()
     return JsonResponse({"id": u.id, "passwordReset": True})
+
+# ── Group endpoints ────────────────────────────────────────────────────────────
+
+@require_GET
+def admin_list_groups(request: HttpRequest) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+    groups = [{"id": g.id, "name": g.name} for g in Group.objects.all().order_by("name")]
+    return JsonResponse({"groups": groups})
+
+
+@require_POST
+def admin_create_group(request: HttpRequest) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+    
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return JsonResponse({"error": "Group name is required."}, status=400)
+    
+    if Group.objects.filter(name__iexact=name).exists():
+        return JsonResponse({"error": "A group with this name already exists."}, status=400)
+        
+    g = Group.objects.create(name=name)
+    return JsonResponse({"id": g.id, "name": g.name, "created": True})
+
+
+@require_POST
+def admin_update_group(request: HttpRequest, group_id: int) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+        
+    name = str(body.get("name", "")).strip()
+    if not name:
+        return JsonResponse({"error": "Group name is required."}, status=400)
+        
+    try:
+        g = Group.objects.get(pk=group_id)
+    except Group.DoesNotExist:
+        return JsonResponse({"error": "Group not found."}, status=404)
+        
+    if Group.objects.filter(name__iexact=name).exclude(pk=group_id).exists():
+        return JsonResponse({"error": "A group with this name already exists."}, status=400)
+        
+    g.name = name
+    g.save()
+    return JsonResponse({"id": g.id, "name": g.name, "updated": True})
+
+
+@require_POST
+def admin_delete_group(request: HttpRequest, group_id: int) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+    try:
+        g = Group.objects.get(pk=group_id)
+    except Group.DoesNotExist:
+        return JsonResponse({"error": "Group not found."}, status=404)
+        
+    if g.name in ["admin", "user"]:
+        return JsonResponse({"error": f"Cannot delete default group '{g.name}'."}, status=400)
+        
+    g.delete()
+    return JsonResponse({"deleted": True})
+

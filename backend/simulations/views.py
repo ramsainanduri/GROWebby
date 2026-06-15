@@ -217,6 +217,16 @@ def simulations(request: HttpRequest) -> JsonResponse:
     return JsonResponse(job_payload(job), status=201)
 
 
+@require_GET
+def admin_all_simulations(request: HttpRequest) -> JsonResponse:
+    if not request.user.is_authenticated or not (request.user.is_staff or request.user.is_superuser):
+        return JsonResponse({"error": "Admin access required."}, status=403)
+        
+    latest = SimulationJob.objects.select_related("upload", "owner", "group").order_by("-created_at")[:200]
+    return JsonResponse({"results": [job_payload(job) for job in latest]})
+
+
+
 @csrf_exempt
 @require_http_methods(["GET", "PATCH", "DELETE"])
 def simulation_detail(_request: HttpRequest, job_id: int) -> JsonResponse:
