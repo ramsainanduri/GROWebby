@@ -18,23 +18,23 @@
 
 # GROWebby
 
-> **A local, Dockerized web interface for GROMACS molecular dynamics workflows.**
+> **A Docker-based web interface for running GROMACS molecular dynamics simulations locally.**
 
-GROWebby provides a web interface for local GROMACS installations. Users upload a coordinate file, configure pipeline stages, launch simulations, inspect intermediate files, and review live metrics from a single browser session. Each user has an isolated workspace, and administrators control access.
+GROWebby is a local web interface for GROMACS. You can upload coordinate files, configure simulation parameters, run jobs, and view the results directly in your browser. Each user gets their own isolated workspace, and an admin panel controls access.
 
 ---
 
 ## What is GROWebby?
 
-GROMACS is widely used for biomolecular simulation, but setting up and running a full MD pipeline requires command-line work, MDP file management, and careful handling of intermediate outputs. GROWebby provides a structured interface for these tasks:
+Setting up a full MD pipeline in GROMACS usually requires a lot of command-line work, editing MDP files manually, and keeping track of intermediate outputs. GROWebby simplifies this by giving you a structured interface:
 
-- **Upload** a `.pdb`, `.gro`, `.cif`, or `.mol2` coordinate file from the Files tab.
-- **Configure** each stage of the pipeline through a guided, form-based UI: force fields, box geometry, solvation, ion concentrations, energy minimization, NVT, NPT, and production runtime.
-- **Launch** one step at a time or run the complete pipeline. Step runs check for the required previous output.
-- **Monitor** live: energy, temperature, and pressure are charted as the simulation runs. Clean run events stream to the log viewer in real time, with full GROMACS command logs stored as files.
-- **Review** results in the 3D MolStar viewer and download trajectory/topology/log files directly from the browser.
+- **Upload** your `.pdb`, `.gro`, `.cif`, or `.mol2` structure files.
+- **Configure** the pipeline steps (force fields, box setup, solvation, ions, minimization, NVT, NPT, and production).
+- **Run** the simulation step-by-step or as a complete pipeline.
+- **Monitor** energy, temperature, and pressure live as the simulation runs. The GROMACS command logs stream directly to the browser.
+- **View** the results using the built-in 3D MolStar viewer and download your trajectories and logs.
 
-Everything runs on your local machine inside Docker. Your data never leaves your hardware.
+Everything runs locally on your machine using Docker.
 
 ---
 
@@ -78,8 +78,8 @@ The same host directory is mounted in the backend container as `/app/media/works
 ### Linux / macOS
 
 ```bash
-git clone <repository-url>
-cd growebby
+git clone -b dev https://github.com/ramsainanduri/GROWebby.git
+cd GROWebby
 ./install.sh   # detects the execution engine and writes .env
 ./start.sh     # starts all services
 ```
@@ -87,8 +87,8 @@ cd growebby
 ### Windows
 
 ```bat
-git clone <repository-url>
-cd growebby
+git clone -b dev https://github.com/ramsainanduri/GROWebby.git
+cd GROWebby
 start.bat
 ```
 

@@ -441,7 +441,8 @@ git log --oneline -5  # review your commits
 ### Per-user workspace layout
 
 ```text
-<MEDIA_ROOT>/workspaces/u<user_id>/<workspace_slug>/
+<MEDIA_ROOT>/workspaces/u<user_id>/runs/<workspace_slug>/
+<MEDIA_ROOT>/workspaces/u<user_id>/uploads/<filename>
 ```
 
 - `u<user_id>` is derived from `user_dir_for_job(job)` in `runner.py`
@@ -460,6 +461,7 @@ git log --oneline -5  # review your commits
 | `views.py` | `artifact_file_path()` | Resolve artifact `Path` |
 | `views.py` | `simulation_detail()` (PATCH) | Rename workspace directory |
 | `views.py` | `simulation_detail()` (DELETE) | Remove workspace directory |
+| `models.py` | `user_upload_path()` | Resolve upload path |
 
 If you add any new file-path resolution, it must go through `user_dir_for_job()`.
 
@@ -468,7 +470,7 @@ If you add any new file-path resolution, it must go through `user_dir_for_job()`
 Artifact URLs stored in `job.parameters["artifactFiles"]` follow:
 
 ```text
-/media/workspaces/u<user_id>/<workspace_slug>/<relative-path>
+/media/workspaces/u<user_id>/runs/<workspace_slug>/<relative-path>
 ```
 
 Django's `MEDIA_URL` prefix is `/media/` by default.

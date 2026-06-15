@@ -61,19 +61,19 @@ The default active path on Apple Silicon without native GROMACS is `docker-backe
 Run files are stored under:
 
 ```text
-<project-root>/.app_state/media/workspaces/u<user_id>/<run-workspace-slug>/
+<project-root>/.app_state/media/workspaces/u<user_id>/runs/<run-workspace-slug>/
 ```
 
 Docker mounts the same host directory into the backend container at:
 
 ```text
-/app/media/workspaces/u<user_id>/<run-workspace-slug>/
+/app/media/workspaces/u<user_id>/runs/<run-workspace-slug>/
 ```
 
 Standalone GROMACS engine containers mount the same host directory at:
 
 ```text
-/work/workspaces/u<user_id>/<run-workspace-slug>/
+/work/workspaces/u<user_id>/runs/<run-workspace-slug>/
 ```
 
 The `u<user_id>` prefix comes from `user_dir_for_job()` in `runner.py`. Anonymous runs use `u0`. This prevents run name collisions between users.

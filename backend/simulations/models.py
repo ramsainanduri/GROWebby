@@ -3,11 +3,16 @@ from django.contrib.auth.models import Group
 from django.db import models
 
 
+def user_upload_path(instance, filename) -> str:
+    user_id = instance.owner.id if instance.owner else 0
+    return f"workspaces/u{user_id}/uploads/{filename}"
+
+
 class UploadedCoordinate(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="coordinate_uploads")
     group = models.ForeignKey(Group, null=True, blank=True, on_delete=models.SET_NULL, related_name="coordinate_uploads")
     original_name = models.CharField(max_length=255)
-    file = models.FileField(upload_to="uploads/")
+    file = models.FileField(upload_to=user_upload_path)
     size = models.PositiveBigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

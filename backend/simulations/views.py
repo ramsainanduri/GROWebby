@@ -123,7 +123,7 @@ def artifact_relative_path(job: SimulationJob, artifact: dict[str, Any]) -> str:
         return str(artifact["path"]).lstrip("/")
     url_path = unquote(urlparse(str(artifact.get("url", ""))).path)
     user_dir = user_dir_for_job(job)
-    marker = f"/workspaces/{user_dir}/{job.workspace_slug}/"
+    marker = f"/workspaces/{user_dir}/runs/{job.workspace_slug}/"
     if marker not in url_path:
         raise ValueError("Artifact does not belong to this run workspace.")
     return url_path.split(marker, 1)[1]
@@ -132,7 +132,7 @@ def artifact_relative_path(job: SimulationJob, artifact: dict[str, Any]) -> str:
 def artifact_file_path(job: SimulationJob, artifact: dict[str, Any]):
     relative = artifact_relative_path(job, artifact)
     user_dir = user_dir_for_job(job)
-    root = (settings.MEDIA_ROOT / "workspaces" / user_dir / job.workspace_slug).resolve()
+    root = (settings.MEDIA_ROOT / "workspaces" / user_dir / "runs" / job.workspace_slug).resolve()
     path = (root / relative).resolve()
     if root not in path.parents and path != root:
         raise ValueError("Artifact path is outside the run workspace.")

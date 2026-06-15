@@ -219,19 +219,14 @@ def user_dir_for_job(job: SimulationJob) -> str:
     return "u0"
 
 
-def run_workspace(job: SimulationJob):
+def run_workspace(job: SimulationJob) -> Path:
     """
     Returns the workspace Path for a job, creating it if required.
-
-    Physical layout on the host::
-
-        .app_state/media/workspaces/u<user_id>/<workspace_slug>/
-
-    This means two users can both have a run called ``run-1-my-protein``
-    without any filesystem collision.
+    Physical layout on the host:
+        .app_state/media/workspaces/u<user_id>/runs/<workspace_slug>/
     """
     slug = job.workspace_slug or f"run-{job.id}-{slugify(job.name or 'simulation')[:80]}"
-    path = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / slug
+    path = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / "runs" / slug
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -239,10 +234,9 @@ def run_workspace(job: SimulationJob):
 def workspace_media_url(job: SimulationJob, relative: str = "") -> str:
     """
     Returns the MEDIA_URL-relative URL for a file inside this job's workspace.
-    ``relative`` should be the path inside the workspace directory (no leading slash).
     """
-    slug = job.workspace_slug or f"run-{job.id}"
-    base = f"{settings.MEDIA_URL}workspaces/{user_dir_for_job(job)}/{slug}/"
+    slug = job.workspace_slug or f"run-{job.id}-{slugify(job.name or 'simulation')[:80]}"
+    base = f"{settings.MEDIA_URL}workspaces/{user_dir_for_job(job)}/runs/{slug}/"
     return base + relative
 
 
