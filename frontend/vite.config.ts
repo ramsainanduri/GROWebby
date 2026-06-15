@@ -1,5 +1,6 @@
 /// <reference types="vitest" />
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import fs from "fs";
 import { execSync } from "child_process";
@@ -44,7 +45,7 @@ function liveVersionsPlugin() {
 const backendProxyTarget = process.env.VITE_BACKEND_PROXY_TARGET ?? "http://localhost:8000";
 
 export default defineConfig({
-  plugins: [react(), liveVersionsPlugin()],
+  plugins: [react(), tailwindcss(), liveVersionsPlugin()],
   server: {
     port: 5173,
     proxy: {
