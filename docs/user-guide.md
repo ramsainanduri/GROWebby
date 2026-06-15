@@ -112,9 +112,21 @@ Open the active run in Results and click Cancel run. GROWebby stores the active 
 
 If a run is still queued or between commands, cancellation marks it as cancelled before the next GROMACS command starts.
 
+## Simulation Runs
+
+The Simulation Runs page lists all your active, queued, completed, and failed runs.
+
+![Simulation Runs](assets/runs.png)
+
+Runs can be deleted from the Simulation Runs page. Deleting a run removes the run record from the app. Treat this as a cleanup action; export or preserve important output files first.
+
 ## Results Workspace
 
-The Results page is the main inspection page for a run. It includes:
+The Results page is the main inspection page for a run.
+
+![Results Workspace](assets/results.png)
+
+It includes:
 
 - Run status and progress.
 - Execution mode.
@@ -135,6 +147,8 @@ The log window shows clean run events. Full GROMACS command output is saved as l
 
 GROWebby stores per-step metrics as CSV artifacts. The plotting panels support:
 
+![Stats and Plots](assets/stats.png)
+
 - Stage filtering.
 - Editable plot titles.
 - Area or line display.
@@ -147,10 +161,6 @@ GROWebby stores per-step metrics as CSV artifacts. The plotting panels support:
 The plots are meant for quick review. For publication-quality analysis, export the CSV files and process them with your lab's preferred analysis tools.
 
 During active `mdrun` stages, plots update with live progress points first. Once GROMACS energy files are readable, the plot data is replaced with extracted GROMACS energy, temperature, pressure, and density values where available.
-
-## Deleting Runs
-
-Runs can be deleted from the Simulation Runs page. Deleting a run removes the run record from the app. Treat this as a cleanup action; export or preserve important output files first.
 
 ## Example Setups
 
