@@ -4,28 +4,7 @@ site_author: Ram Sai Nanduri
 repo_url: https://github.com/ramsainanduri/GROWebby
 repo_name: ramsainanduri/GROWebby
 
-theme:
-  name: material
-  features:
-    - navigation.sections
-    - navigation.top
-    - search.suggest
-    - search.highlight
-    - content.code.copy
-    - content.tabs.link
-  palette:
-    - scheme: default
-      primary: teal
-      accent: teal
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: teal
-      accent: teal
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+theme: readthedocs
 
 markdown_extensions:
   - toc:
