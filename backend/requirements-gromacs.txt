@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Install this only inside an image/environment that already provides GROMACS.
+# The Python package builds against the underlying GROMACS installation.
+gmxapi>=0.4.2

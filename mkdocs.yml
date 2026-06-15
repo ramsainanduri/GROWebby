@@ -1,0 +1,29 @@
+site_name: GROWebby
+site_description: A local web interface for GROMACS molecular dynamics
+site_author: Ram Sai Nanduri
+repo_url: https://github.com/ramsainanduri/GROWebby
+repo_name: ramsainanduri/GROWebby
+
+theme: readthedocs
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - User Guide: user-guide.md
+  - Simulation Workflow: simulation-workflow.md
+  - Administration: administration.md
+  - Architecture: architecture.md
+  - Operations: operations.md
+  - Contributing: ../CONTRIBUTING.md

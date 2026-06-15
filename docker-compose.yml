@@ -1,0 +1,69 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-local-gromacs-web-interface-key}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-0}"
+      DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend}"
+      DJANGO_CORS_ALLOWED_ORIGINS: "${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}"
+      GROWEBBY_SERVE_MEDIA: "${GROWEBBY_SERVE_MEDIA:-1}"
+      GROWEBBY_MEDIA_ROOT: "${GROWEBBY_MEDIA_ROOT:-/app/media}"
+      GROMACS_WORK_ROOT: "${GROMACS_WORK_ROOT:-/app/media/workspaces}"
+      GROMACS_BINARY: "${GROMACS_BINARY:-/usr/local/gromacs/bin/gmx}"
+      GROMACS_EXECUTION_MODE: "${GROMACS_EXECUTION_MODE:-backend-gmx-2026.2}"
+      GROWEBBY_ENGINE: "${GROWEBBY_ENGINE:-docker-backend-cpu}"
+      GROWEBBY_ALLOW_VALIDATION_RUNS: "${GROWEBBY_ALLOW_VALIDATION_RUNS:-0}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./.app_state/media:/app/media
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api}"
+      VITE_BACKEND_PROXY_TARGET: "${VITE_BACKEND_PROXY_TARGET:-http://backend:8000}"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+
+  gromacs-cuda-engine:
+    build:
+      context: ./docker/gromacs
+    platform: linux/amd64
+    profiles: ["cuda"]
+    command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+    volumes:
+      - ./.app_state/media:/work
+
+  gromacs-cpu-engine:
+    build:
+      context: ./docker/gromacs-cpu
+    profiles: ["cpu"]
+    command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
+    volumes:
+      - ./.app_state/media:/work
+
+  gromacs-metal-engine:
+    build:
+      context: ./docker/gromacs-metal
+    profiles: ["metal"]
+    command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
+    volumes:
+      - ./.app_state/media:/work
+
+volumes:
+  frontend-node-modules:
