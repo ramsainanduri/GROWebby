@@ -65,8 +65,28 @@ if [[ "${GROWEBBY_ENGINE:-}" == "mac-opencl-native" ]]; then
     echo $! > ../.app_state/backend.pid
   )
 else
-  # Only rebuild the thin app layers (backend + frontend).
-  # GROMACS engine containers are pre-built tool images pulled from Docker Hub.
+  # Determine which engine service is active from the profile
+  ENGINE_SERVICE=""
+  case "${GROWEBBY_ENGINE:-}" in
+    *cuda*)  ENGINE_SERVICE="gromacs-cuda-engine" ;;
+    *cpu*)   ENGINE_SERVICE="gromacs-cpu-engine" ;;
+    *metal*) ENGINE_SERVICE="gromacs-metal-engine" ;;
+  esac
+
+  # Explicitly pull the engine image from Docker Hub first.
+  # Engine containers reuse the base-backend-{cpu,cuda,metal} images which are
+  # already on Docker Hub. This ensures pull_policy: missing finds them locally
+  # and never falls back to a local build unnecessarily.
+  if [[ -n "$ENGINE_SERVICE" ]]; then
+    echo "Checking Docker Hub for pre-built engine image ($ENGINE_SERVICE)..."
+    if docker compose pull "$ENGINE_SERVICE" 2>/dev/null; then
+      echo "Engine image pulled from Docker Hub."
+    else
+      echo "Not found on Docker Hub — will build locally. This may take 15-30 minutes."
+    fi
+  fi
+
+  # Build thin app layers (backend + frontend) from base images, then start everything.
   docker compose up --build backend frontend -d
   docker compose up -d
 fi

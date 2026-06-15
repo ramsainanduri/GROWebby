@@ -1,0 +1,26 @@
+# ── docker-compose.build.yml ───────────────────────────────────────────────────
+# Developer override: adds build contexts to GROMACS engine containers.
+# Use this only when you need to rebuild engine images from source (e.g., when
+# upgrading GROMACS or changing Dockerfiles).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build gromacs-cuda-engine
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build gromacs-cpu-engine
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build gromacs-metal-engine
+#
+# After rebuilding, push with:
+#   ./build-base-images.sh --engines --push
+# ──────────────────────────────────────────────────────────────────────────────
+services:
+  gromacs-cuda-engine:
+    build:
+      context: ./docker/gromacs
+      platform: linux/amd64
+
+  gromacs-cpu-engine:
+    build:
+      context: ./docker/gromacs-cpu
+
+  gromacs-metal-engine:
+    build:
+      context: ./docker/gromacs-metal

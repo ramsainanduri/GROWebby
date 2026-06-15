@@ -43,12 +43,14 @@ services:
       - frontend-node-modules:/app/node_modules
 
   # ── GROMACS Engine: CUDA (nvidia GPU) ─────────────────────────────────────
+  # Reuses growebby-base-backend-cuda which already has GROMACS compiled with CUDA.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-cuda Dockerfile).
   gromacs-cuda-engine:
-    image: ramsainanduri/growebby-gromacs-cuda-engine:${GROWEBBY_VERSION:-latest}
+    image: ramsainanduri/growebby-base-backend-cuda:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
     build:
-      context: ./docker/gromacs
-    platform: linux/amd64
+      context: ./docker/base-backend-cuda
+      platform: linux/amd64
     profiles: ["cuda"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     deploy:
@@ -62,22 +64,26 @@ services:
       - ./.app_state/media:/work
 
   # ── GROMACS Engine: CPU (no GPU) ───────────────────────────────────────────
+  # Reuses growebby-base-backend-cpu which already has GROMACS CPU compiled.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-cpu Dockerfile).
   gromacs-cpu-engine:
-    image: ramsainanduri/growebby-gromacs-cpu-engine:${GROWEBBY_VERSION:-latest}
+    image: ramsainanduri/growebby-base-backend-cpu:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
     build:
-      context: ./docker/gromacs-cpu
+      context: ./docker/base-backend-cpu
     profiles: ["cpu"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     volumes:
       - ./.app_state/media:/work
 
   # ── GROMACS Engine: Metal / OpenCL (macOS GPU) ────────────────────────────
+  # Reuses growebby-base-backend-metal which already has GROMACS OpenCL compiled.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-metal Dockerfile).
   gromacs-metal-engine:
-    image: ramsainanduri/growebby-gromacs-metal-engine:${GROWEBBY_VERSION:-latest}
+    image: ramsainanduri/growebby-base-backend-metal:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
     build:
-      context: ./docker/gromacs-metal
+      context: ./docker/base-backend-metal
     profiles: ["metal"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     volumes:
