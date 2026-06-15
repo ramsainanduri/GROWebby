@@ -11,11 +11,13 @@ mkdir -p "$STATE_DIR/media/workspaces" "$STATE_DIR/media/uploads"
 OS_NAME="$(uname -s)"
 ARCH_NAME="$(uname -m)"
 HOST_GMX="$(command -v gmx || true)"
-ENGINE="docker-cpu"
+REPO="ramsainanduri"
+ENGINE="linux-cpu"
 COMPOSE_PROFILES="cpu"
-EXECUTION_MODE="docker-cpu"
-GROMACS_BINARY=""
-STATUS="CPU Docker engine selected."
+EXECUTION_MODE="backend-gmx-2026.2"
+GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
+BACKEND_BASE_IMAGE="${REPO}/growebby-base-backend-cpu:latest"
+STATUS="CPU Docker engine profile selected."
 
 if [[ "$OS_NAME" == "Darwin" && "$ARCH_NAME" == "arm64" ]]; then
   if [[ -n "$HOST_GMX" ]] && "$HOST_GMX" --version 2>/dev/null | grep -qi "GPU support:.*OpenCL"; then
@@ -23,24 +25,30 @@ if [[ "$OS_NAME" == "Darwin" && "$ARCH_NAME" == "arm64" ]]; then
     COMPOSE_PROFILES=""
     EXECUTION_MODE="native-opencl"
     GROMACS_BINARY="$HOST_GMX"
-    STATUS="Apple Silicon detected with native GROMACS OpenCL support. GROWebby will run the backend on macOS so GROMACS can use the M-series GPU."
+    BACKEND_BASE_IMAGE="${REPO}/growebby-base-backend-metal:latest"
+    STATUS="Apple Silicon with native GROMACS OpenCL. Backend runs on macOS, GPU via M-series."
   else
-    ENGINE="docker-backend-cpu"
+    ENGINE="linux-cpu"
     COMPOSE_PROFILES=""
     EXECUTION_MODE="backend-gmx-2026.2"
     GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
-    STATUS="Apple Silicon detected, but no native OpenCL-enabled gmx was found. GROWebby will run GROMACS 2026.2 inside Docker with CPU/OpenMP support. Install a native OpenCL GROMACS build to enable the M-series GPU path."
+    BACKEND_BASE_IMAGE="${REPO}/growebby-base-backend-cpu:latest"
+    STATUS="Apple Silicon without native OpenCL gmx. Running GROMACS 2026.2 in Docker with CPU/OpenMP."
   fi
 elif command -v nvidia-smi >/dev/null 2>&1; then
   ENGINE="linux-nvidia-cuda"
   COMPOSE_PROFILES="cuda"
-  EXECUTION_MODE="docker-cuda"
+  EXECUTION_MODE="backend-gmx-2026.2"
+  GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
+  BACKEND_BASE_IMAGE="${REPO}/growebby-base-backend-cuda:latest"
   STATUS="NVIDIA GPU detected. CUDA Docker engine profile selected."
 elif [[ "$OS_NAME" == "Linux" ]]; then
   ENGINE="linux-cpu"
   COMPOSE_PROFILES="cpu"
-  EXECUTION_MODE="docker-cpu"
-  STATUS="Linux host without NVIDIA GPU detection. CPU Docker engine profile selected."
+  EXECUTION_MODE="backend-gmx-2026.2"
+  GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
+  BACKEND_BASE_IMAGE="${REPO}/growebby-base-backend-cpu:latest"
+  STATUS="Linux without NVIDIA GPU. CPU Docker engine profile selected."
 fi
 
 cat > "$ENV_FILE" <<EOF
@@ -51,6 +59,7 @@ GROMACS_EXECUTION_MODE=$EXECUTION_MODE
 GROMACS_BINARY=$GROMACS_BINARY
 GROMACS_WORK_ROOT=/app/media/workspaces
 GROWEBBY_MEDIA_ROOT=$STATE_DIR/media
+BACKEND_BASE_IMAGE=$BACKEND_BASE_IMAGE
 EOF
 
 cat > "$STATE_FILE" <<EOF
