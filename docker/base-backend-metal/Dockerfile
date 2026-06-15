@@ -22,6 +22,7 @@ RUN apt-get update \
       curl \
       libfftw3-dev \
       libhwloc-dev \
+      libopenmpi-dev \
       ocl-icd-opencl-dev \
       opencl-headers \
     && rm -rf /var/lib/apt/lists/*
