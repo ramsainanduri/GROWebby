@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docker/base-backend-metal/Dockerfile` — Python 3.14 + OpenCL + GROMACS 2026.2 OpenCL + pip deps, no app code.
 - `docker/base-frontend/Dockerfile` — Node 22 + baked-in `node_modules`, no app code.
 - `build-base-images.sh` — helper script to build and optionally push all base images with `--cpu`, `--cuda`, `--metal`, `--frontend`, `--all`, `--push`, and `--tag` flags.
+- `install_forcefields.sh` script to automatically download and install additional GROMACS force fields (`charmm36` variants, `amber03ws`, `amber14sb_OL15`) into the backend container during build.
+
+### Fixed
+- Fixed deployment script `start.sh` where `docker compose pull` could hang indefinitely; now uses a direct `docker pull` with a 60-second timeout.
+- Fixed backend container crashing immediately on Ubuntu base images by explicitly using `python3` instead of `python` in the Dockerfile `CMD`.
+- Cleaned up GROMACS parameter choices in the UI by removing entirely unsupported force fields (e.g., `AMOEBA`, `OPLS-AA_SEI`) and ensuring water models match the available topologies.
 
 ### Changed
 - `backend/Dockerfile` reduced to `FROM ${BASE_IMAGE} + COPY .` — no more GROMACS compilation on every code change.
