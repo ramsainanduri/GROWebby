@@ -121,11 +121,12 @@ if $BUILD_METAL; then
 fi
 
 if $BUILD_FRONTEND; then
+  cp frontend/package.json docker/base-frontend/
+  cp frontend/package-lock.json docker/base-frontend/ 2>/dev/null || true
+  trap "rm -f docker/base-frontend/package.json docker/base-frontend/package-lock.json" EXIT
   build_and_push \
     "growebby-base-frontend" \
-    "docker/base-frontend" \
-    "docker/base-frontend/Dockerfile" \
-    "frontend/package.json frontend/package-lock.json"
+    "docker/base-frontend"
 fi
 
 echo ""
