@@ -22,6 +22,8 @@
 
 GROWebby is a local web interface for GROMACS. You can upload coordinate files, configure simulation parameters, run jobs, and view the results directly in your browser. Each user gets their own isolated workspace, and an admin panel controls access.
 
+![Dashboard](docs/assets/dashboard.png)
+
 ---
 
 ## What is GROWebby?

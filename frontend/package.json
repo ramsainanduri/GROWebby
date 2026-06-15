@@ -27,6 +27,7 @@
     "@types/react-dom": "latest",
     "autoprefixer": "latest",
     "postcss": "latest",
+    "puppeteer": "^25.1.0",
     "tailwindcss": "latest",
     "vitest": "latest"
   }

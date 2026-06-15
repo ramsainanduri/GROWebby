@@ -46,11 +46,15 @@ The application sidebar contains the primary work areas:
 - Admin Panel: user approval and user status management for staff users.
 - About: version and project information.
 
+![Admin Panel](assets/admin.png)
+
 The sidebar can collapse to icons so more screen width is available for the workflow, molecule view, config preview, and results panels.
 
 ## Uploading Coordinate Files
 
 Use the Files page or the Workflow Setup page to upload coordinate files. Supported formats are:
+
+![Files Page](assets/files.png)
 
 - `.pdb`
 - `.gro`
@@ -62,6 +66,8 @@ Uploaded files are owned by the signed-in user. Staff users can see all uploads.
 ## Creating a Run
 
 Open Workflow Setup and select or upload a coordinate file.
+
+![Workflow Setup](assets/workflow.png)
 
 Each run has a generated name based on the input and timestamp. You can rename it before starting. Renaming a completed run also renames its workspace folder.
 
