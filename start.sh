@@ -65,24 +65,15 @@ if [[ "${GROWEBBY_ENGINE:-}" == "mac-opencl-native" ]]; then
     echo $! > ../.app_state/backend.pid
   )
 else
-  # Determine which engine service is active from the profile
-  ENGINE_SERVICE=""
-  case "${GROWEBBY_ENGINE:-}" in
-    *cuda*)  ENGINE_SERVICE="gromacs-cuda-engine" ;;
-    *cpu*)   ENGINE_SERVICE="gromacs-cpu-engine" ;;
-    *metal*) ENGINE_SERVICE="gromacs-metal-engine" ;;
-  esac
-
-  # Explicitly pull the engine image from Docker Hub first.
-  # Engine containers reuse the base-backend-{cpu,cuda,metal} images which are
-  # already on Docker Hub. This ensures pull_policy: missing finds them locally
-  # and never falls back to a local build unnecessarily.
-  if [[ -n "$ENGINE_SERVICE" ]]; then
-    echo "Checking Docker Hub for pre-built engine image ($ENGINE_SERVICE)..."
-    if timeout 60 docker compose pull "$ENGINE_SERVICE" 2>/dev/null; then
-      echo "Engine image pulled from Docker Hub."
+  # Pull the base image from Docker Hub so engine + backend containers reuse it.
+  # BACKEND_BASE_IMAGE is set in .env by install.sh (e.g. growebby-base-backend-cuda).
+  # If the pull fails or times out, docker compose will build locally as fallback.
+  if [[ -n "${BACKEND_BASE_IMAGE:-}" ]]; then
+    echo "Pulling base image from Docker Hub: $BACKEND_BASE_IMAGE ..."
+    if timeout 120 docker pull "$BACKEND_BASE_IMAGE" 2>/dev/null; then
+      echo "  ✅ Base image ready."
     else
-      echo "Not found on Docker Hub or timed out — will build locally. This may take 15-30 minutes."
+      echo "  ℹ️  Pull failed or timed out — will build locally if needed."
     fi
   fi
 
