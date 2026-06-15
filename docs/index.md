@@ -11,6 +11,22 @@ This folder contains the operating and user documentation for GROWebby.
 - [Operations and Troubleshooting](operations.md): startup, health checks, GPU modes, logs, and common failures.
 - [Contributing](../CONTRIBUTING.md): development standards, checks, and pull request guidance.
 
+### Working with the Documentation
+
+The documentation is built using MkDocs. To view or edit it locally:
+
+```bash
+pip install mkdocs-material
+mkdocs serve
+```
+
+We also recommend installing the pre-commit hooks to keep code formatting clean:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
 ## Current Execution Model
 
 GROWebby runs the browser UI and Django API locally. Simulations are executed by GROMACS through the backend runner. On this machine the active engine is currently:

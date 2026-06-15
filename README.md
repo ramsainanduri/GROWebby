@@ -125,6 +125,27 @@ Full documentation is available in [`docs/`](docs/README.md):
 - [Operations and Troubleshooting](docs/operations.md)
 - [Contributing](CONTRIBUTING.md)
 
+### Building Documentation Locally
+
+This project uses MkDocs to build its documentation.
+
+```bash
+# Install mkdocs and the material theme
+pip install mkdocs-material
+
+# Serve documentation locally at http://127.0.0.1:8000
+mkdocs serve
+```
+
+### Pre-commit Hooks
+
+Before contributing, install the pre-commit hooks to ensure formatting and linting:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
 ---
 
 ## User Registration & Approval
