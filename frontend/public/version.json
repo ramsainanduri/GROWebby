@@ -2,7 +2,7 @@
   "version": "1.0.0",
   "buildDate": "2026-06-15",
   "tools": {
-    "gromacs": "2025.4",
+    "gromacs": "2026.2",
     "gmxapi": "0.4.x",
     "python": "3.14",
     "django": "6.0.6",

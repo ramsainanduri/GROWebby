@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time simulation progress monitoring with live log streaming
 - Energy, temperature, and pressure metric charts (Recharts)
 - 3D molecular structure viewer powered by **MolStar** 3.12.0 (PDBe)
-- CUDA GPU engine built on **GROMACS 2025.4** + `nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04`
+- CUDA GPU engine built on **GROMACS 2026.2** + `nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04`
 
 #### Authentication & User Management
 - Session-based authentication with Django (CSRF-protected)

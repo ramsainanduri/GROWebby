@@ -8,15 +8,19 @@ class AuthApiTests(TestCase):
     def test_register_login_session_logout_flow(self):
         response = self.client.post(
             "/api/auth/register/",
-            data=json.dumps({"username": "ada", "email": "ada@example.com", "password": "correct-horse"}),
+            data=json.dumps({"username": "ada", "email": "ada@example.com", "password": "correct-horse", "purpose": "Testing GROWebby"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(response.json()["isAuthenticated"])
+        self.assertTrue(response.json()["registered"])
 
         response = self.client.post("/api/auth/logout/")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["isAuthenticated"])
+
+        user = get_user_model().objects.get(username="ada")
+        user.is_active = True
+        user.save(update_fields=["is_active"])
 
         response = self.client.post(
             "/api/auth/login/",

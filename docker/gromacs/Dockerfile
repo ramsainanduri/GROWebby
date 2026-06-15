@@ -1,6 +1,6 @@
 # ── GROMACS CUDA engine ────────────────────────────────────────────────────────
 # Base: latest CUDA 13 + cuDNN on Ubuntu 24.04 LTS (Noble Numbat)
-# GROMACS: 2025.4 (latest stable as of June 2026)
+# GROMACS: 2026.2
 # ──────────────────────────────────────────────────────────────────────────────
 FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
 
@@ -15,7 +15,7 @@ RUN apt-get update \
       ca-certificates \
       cmake \
       curl \
-      fftw3-dev \
+      libfftw3-dev \
       git \
       libhwloc-dev \
       libopenmpi-dev \
@@ -25,8 +25,8 @@ RUN apt-get update \
       python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Build GROMACS 2025.4 with CUDA GPU support ────────────────────────────────
-RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2025.4.tar.gz -o /tmp/gromacs.tar.gz \
+# ── Build GROMACS 2026.2 with CUDA GPU support ────────────────────────────────
+RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2026.2.tar.gz -o /tmp/gromacs.tar.gz \
     && mkdir -p /tmp/gromacs-src \
     && tar -xzf /tmp/gromacs.tar.gz -C /tmp/gromacs-src --strip-components=1 \
     && cmake -S /tmp/gromacs-src -B /tmp/gromacs-build \

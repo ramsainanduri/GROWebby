@@ -4,7 +4,7 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-gromacs-web-interface-key")
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")]
 
 INSTALLED_APPS = [
@@ -88,3 +88,4 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 GROMACS_WORK_ROOT = Path(os.environ.get("GROMACS_WORK_ROOT", MEDIA_ROOT / "workspaces"))
+GROWEBBY_SERVE_MEDIA = os.environ.get("GROWEBBY_SERVE_MEDIA", "1") == "1"

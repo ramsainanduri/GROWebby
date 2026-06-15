@@ -3,7 +3,7 @@
 # GROMACS uses OpenCL as its GPU backend on macOS — Metal is accessed through Apple's
 # OpenCL runtime layer automatically on M-series hardware.
 #
-# Base: Python 3.14 slim (Debian) + GROMACS 2025.4 compiled with -DGMX_GPU=OpenCL
+# Base: Python 3.14 slim (Debian) + GROMACS 2026.2 compiled with -DGMX_GPU=OpenCL
 # Profile: docker compose --profile metal up
 # ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.14-slim
@@ -22,7 +22,7 @@ RUN apt-get update \
       ca-certificates \
       cmake \
       curl \
-      fftw3-dev \
+      libfftw3-dev \
       libhwloc-dev \
       ocl-icd-opencl-dev \
       opencl-headers \
@@ -30,8 +30,8 @@ RUN apt-get update \
       python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Build GROMACS 2025.4 with OpenCL GPU support ──────────────────────────────
-RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2025.4.tar.gz -o /tmp/gromacs.tar.gz \
+# ── Build GROMACS 2026.2 with OpenCL GPU support ──────────────────────────────
+RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2026.2.tar.gz -o /tmp/gromacs.tar.gz \
     && mkdir -p /tmp/gromacs-src \
     && tar -xzf /tmp/gromacs.tar.gz -C /tmp/gromacs-src --strip-components=1 \
     && cmake -S /tmp/gromacs-src -B /tmp/gromacs-build \

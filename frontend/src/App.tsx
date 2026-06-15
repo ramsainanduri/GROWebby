@@ -21,6 +21,7 @@ import {
   Play,
   PlayCircle,
   RefreshCw,
+  Rocket,
   Scale,
   ServerCog,
   Settings,
@@ -32,24 +33,33 @@ import {
   Zap
 } from "lucide-react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   adminApproveUser,
   adminDenyUser,
   adminListUsers,
   AdminUser,
+  ArtifactFile,
+  cancelSimulation,
+  createDemoSetup,
   createSimulation,
+  deleteSimulation,
+  getHealth,
   getSimulation,
   getSimulationLogs,
   getSession,
+  HealthState,
   listSimulations,
   listUploads,
   loginUser,
   logHistoryUrl,
   logStreamUrl,
   logoutUser,
+  readArtifact,
   registerUser,
+  renameSimulation,
+  saveArtifact,
   SimulationJob,
   SessionState,
   UploadedCoordinate,
@@ -58,7 +68,7 @@ import {
 import { ThemeToggle } from "./components/ThemeToggle";
 import { Viewer3D } from "./components/Viewer3D";
 
-type StepKey = "topology" | "box" | "solvation" | "ions" | "minimize" | "equilibrate" | "production";
+type StepKey = "topology" | "box" | "solvation" | "ions" | "minimize" | "nvt" | "npt" | "production";
 type ViewKey = "dashboard" | "workflow" | "files" | "runs" | "results" | "stats" | "admin" | "about";
 
 const steps = [
@@ -67,7 +77,8 @@ const steps = [
   { key: "solvation", name: "Solvation", icon: Waves, detail: "solvate solvent structure and topology update" },
   { key: "ions", name: "Ions", icon: Sparkles, detail: "genion neutralization and salt concentration" },
   { key: "minimize", name: "Minimize", icon: Gauge, detail: "energy minimization MDP options" },
-  { key: "equilibrate", name: "Equilibrate", icon: Scale, detail: "NVT/NPT temperature and pressure control" },
+  { key: "nvt", name: "NVT", icon: Scale, detail: "constant volume temperature equilibration" },
+  { key: "npt", name: "NPT", icon: Gauge, detail: "constant pressure density equilibration" },
   { key: "production", name: "Production", icon: FlaskConical, detail: "production MD runtime and output cadence" }
 ] satisfies { key: StepKey; name: string; icon: typeof Atom; detail: string }[];
 
@@ -83,7 +94,11 @@ const navItems = [
 ] satisfies { key: ViewKey; label: string; icon: typeof LayoutDashboard }[];
 
 const defaults = {
+  runName: "",
+  runGroupId: 0,
+  runMode: "step",
   startStep: "topology" as StepKey,
+  runUntil: "topology" as StepKey,
   forceField: "amber99sb-ildn",
   waterModel: "tip3p",
   ignoreHydrogens: true,
@@ -103,12 +118,13 @@ const defaults = {
   emstep: 0.01,
   temperature: 300,
   pressure: 1,
-  ensemble: "NPT",
   thermostat: "V-rescale",
   barostat: "Parrinello-Rahman",
   dt: 0.002,
   minimizationSteps: 50000,
-  equilibrationPs: 100,
+  nvtPs: 100,
+  nptPs: 100,
+  targetDensity: 1000,
   productionNs: 10,
   outputEveryPs: 10,
   constraints: "h-bonds",
@@ -130,7 +146,7 @@ function MainApp() {
   const [navCollapsed, setNavCollapsed] = useState(true);
   const view = (location.pathname === "/" ? "dashboard" : location.pathname.substring(1)) as ViewKey;
   const [activeStep, setActiveStep] = useState(0);
-  const [parameters, setParameters] = useState(defaults);
+  const [parameters, setParameters] = useState({ ...defaults, runName: makeRunName() });
   const [upload, setUpload] = useState<UploadedCoordinate | null>(null);
   const [uploads, setUploads] = useState<UploadedCoordinate[]>([]);
   const [job, setJob] = useState<SimulationJob | null>(null);
@@ -138,9 +154,34 @@ function MainApp() {
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notifications, setNotifications] = useState<{ id: number; tone: "success" | "error" | "info"; message: string }[]>([]);
+  const [versionInfo, setVersionInfo] = useState<{ version: string; buildDate: string; tools: Record<string, string> } | null>(null);
+  const [health, setHealth] = useState<HealthState | null>(null);
   const [session, setSession] = useState<SessionState>({ isAuthenticated: false, user: null });
   const [sessionChecked, setSessionChecked] = useState(false);
 
+
+  useEffect(() => {
+    fetch("/version.json")
+      .then((response) => response.json())
+      .then(setVersionInfo)
+      .catch(() => undefined);
+    getHealth()
+      .then(setHealth)
+      .catch(() => undefined);
+  }, []);
+
+  function notify(tone: "success" | "error" | "info", message: string) {
+    const id = Date.now() + Math.random();
+    setNotifications((current) => [...current.slice(-3), { id, tone, message }]);
+    window.setTimeout(() => setNotifications((current) => current.filter((item) => item.id !== id)), 6000);
+  }
+
+  function reportError(err: unknown, fallback: string) {
+    const message = err instanceof Error ? err.message : fallback;
+    setError(message);
+    notify("error", message);
+  }
 
   useEffect(() => {
     getSession()
@@ -168,8 +209,12 @@ function MainApp() {
     if (!job) return;
     const source = new EventSource(logStreamUrl(job.id));
     source.onmessage = (event) => {
-      const data = JSON.parse(event.data) as { message: string };
-      setLogs((current) => [...current.slice(-160), data.message]);
+      try {
+        const data = JSON.parse(event.data) as { message: string };
+        setLogs((current) => current.includes(data.message) ? current : [...current.slice(-160), data.message]);
+      } catch {
+        setLogs((current) => [...current.slice(-160), event.data]);
+      }
     };
     source.addEventListener("done", () => source.close());
     source.onerror = () => source.close();
@@ -187,7 +232,7 @@ function MainApp() {
       setRuns(freshRuns);
       setUploads(freshUploads);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not refresh workspace");
+      reportError(err, "Could not refresh workspace");
     }
   }
 
@@ -198,29 +243,97 @@ function MainApp() {
     try {
       const uploaded = await uploadCoordinate(file);
       setUpload(uploaded);
+      setParameters((current) => ({ ...current, runName: current.runName || makeRunName(uploaded.originalName) }));
       setUploads((current) => [uploaded, ...current.filter((item) => item.id !== uploaded.id)]);
+      notify("success", `Uploaded ${uploaded.originalName}.`);
       navigate("/workflow");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      reportError(err, "Upload failed");
     } finally {
       setBusy(false);
     }
   }
 
-  async function startSimulation() {
+  async function startSimulation(overrides: Partial<typeof defaults> = {}) {
     if (!upload) return;
     setBusy(true);
     setError("");
     setLogs([]);
     try {
-      const created = await createSimulation(upload!.id, parameters);
+      const runParameters = normalizeRunParameters({ ...parameters, ...overrides });
+      const created = await createSimulation(upload!.id, runParameters, String(runParameters.runName));
       setJob(created);
       setRuns((current) => upsertRun(current, created));
-      navigate("/runs");
+      notify("success", `Started ${created.name}.`);
+      navigate("/results");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start simulation");
+      reportError(err, "Could not start simulation");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createDemo(demoKey: "lysozyme" | "small-molecule") {
+    setBusy(true);
+    setError("");
+    try {
+      const demo = await createDemoSetup(demoKey);
+      setUpload(demo.upload);
+      setUploads((current) => [demo.upload, ...current.filter((item) => item.id !== demo.upload.id)]);
+      setParameters({ ...defaults, runName: makeRunName(demo.upload.originalName), ...demo.parameters });
+      notify("success", "Demo setup created.");
+      navigate("/workflow");
+    } catch (err) {
+      reportError(err, "Could not create demo setup");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRun(runId: number) {
+    const target = runs.find((run) => run.id === runId);
+    const groupId = target?.runGroupId ?? runId;
+    if (!confirm(`Delete run #${groupId} and its stored files?`)) return;
+    setError("");
+    try {
+      await deleteSimulation(runId);
+      setRuns((current) => current.filter((run) => (run.runGroupId ?? run.id) !== groupId));
+      if (job && (job.runGroupId ?? job.id) === groupId) {
+        setJob(null);
+        setLogs([]);
+        navigate("/runs");
+      }
+      notify("success", `Deleted run #${groupId}.`);
+    } catch (err) {
+      reportError(err, "Could not delete run");
+    }
+  }
+
+  async function renameRun(runId: number, name: string) {
+    setError("");
+    try {
+      const renamed = await renameSimulation(runId, name);
+      setJob((current) => current?.id === runId ? renamed : current);
+      setRuns((current) => upsertRun(current.map((run) => (run.runGroupId ?? run.id) === renamed.runGroupId ? { ...run, name: renamed.name, workspaceSlug: renamed.workspaceSlug, parameters: { ...run.parameters, runName: renamed.name, runGroupId: renamed.runGroupId } } : run), renamed));
+      setParameters((current) => current.runName === name ? current : { ...current, runName: renamed.name });
+      notify("success", "Run renamed.");
+    } catch (err) {
+      reportError(err, "Could not rename run");
+    }
+  }
+
+  async function cancelRun(runId: number) {
+    const target = runs.find((run) => run.id === runId) ?? job;
+    if (!target || !["queued", "running"].includes(target.status)) return;
+    if (!confirm(`Cancel ${target.name || `run #${target.id}`}? The active GROMACS process will be terminated.`)) return;
+    setError("");
+    try {
+      const cancelled = await cancelSimulation(runId);
+      setJob((current) => current?.id === runId ? cancelled : current);
+      setRuns((current) => upsertRun(current, cancelled));
+      notify("info", `Cancellation requested for ${cancelled.name}.`);
+    } catch (err) {
+      reportError(err, "Could not cancel run");
     }
   }
 
@@ -231,13 +344,25 @@ function MainApp() {
       const logEntries = await getSimulationLogs(runId);
       setJob(selected);
       setUpload(selected.upload);
-      setParameters({ ...defaults, ...selected.parameters });
+      setParameters({ ...defaults, runName: selected.name, ...selected.parameters });
       setLogs(logEntries.map((entry) => entry.message));
       setRuns((current) => upsertRun(current, selected));
       navigate(`/${nextView}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load run");
+      reportError(err, "Could not load run");
     }
+  }
+
+  function configureNextStepFromRun(run: SimulationJob) {
+    const lastStage = [...run.metrics].reverse().find((metric) => metric.stage)?.stage as StepKey | undefined;
+    const currentStep = (run.parameters.startStep as StepKey | undefined) ?? lastStage ?? "topology";
+    const currentIndex = steps.findIndex((step) => step.key === currentStep);
+    const nextIndex = Math.min(Math.max(currentIndex, 0) + 1, steps.length - 1);
+    const nextStep = steps[nextIndex].key;
+    setActiveStep(nextIndex);
+    setUpload(run.upload);
+    setParameters({ ...defaults, runName: run.name || makeRunName(run.upload.originalName), ...run.parameters, runGroupId: run.runGroupId ?? run.id, startStep: nextStep, runUntil: nextStep });
+    navigate("/workflow");
   }
 
   const navigate = useNavigate();
@@ -276,7 +401,7 @@ function MainApp() {
           </div>
           {!navCollapsed && (
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold 2xl:text-lg">GROWebby</h1>
+              <h1 className="truncate text-base font-semibold 2xl:text-lg">GROWebby {versionInfo ? <span className="text-xs font-medium text-slate-500 dark:text-slate-400">v{versionInfo.version}</span> : null}</h1>
               <p className="truncate text-xs text-slate-500 dark:text-slate-400">MD operations console</p>
             </div>
           )}
@@ -322,7 +447,7 @@ function MainApp() {
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold 2xl:text-lg">{navItems.find((item) => item.key === view)?.label}</h2>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">{job ? `Focused on run #${job.id} · ${job.currentStep}` : "Configure, launch, and review molecular dynamics runs"}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">{job ? `Focused on run #${job.id} · ${job.currentStep}` : `GROWebby${versionInfo ? ` v${versionInfo.version}` : ""} · Configure, launch, and review molecular dynamics runs`}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -367,14 +492,13 @@ function MainApp() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          {error && <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-200">{error}</p>}
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} />} />
-            <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} />} />
+            <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} createDemo={createDemo} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} busy={busy} />} />
+            <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} health={health} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} />} />
             <Route path="/files" element={<FilesView handleFile={handleFile} selectUpload={setUpload} upload={upload} uploads={uploads} />} />
-            <Route path="/runs" element={<RunsView job={job} runs={runs} selectRun={selectRun} />} />
-            <Route path="/results" element={<ResultsView job={job} logs={logs} selectRun={selectRun} dark={dark} />} />
+            <Route path="/runs" element={<RunsView job={job} runs={runs} removeRun={removeRun} selectRun={selectRun} />} />
+            <Route path="/results" element={<ResultsView cancelRun={cancelRun} configureNextStep={configureNextStepFromRun} job={job} logs={logs} notify={notify} renameRun={renameRun} selectRun={selectRun} dark={dark} />} />
             <Route path="/stats" element={<StatsView runs={runs} />} />
             <Route path="/admin" element={<AdminView session={session} />} />
             <Route path="/about" element={<AboutView />} />
@@ -382,19 +506,22 @@ function MainApp() {
           </Routes>
         </div>
       </section>
+      <NotificationStack notifications={notifications} dismiss={(id) => setNotifications((current) => current.filter((item) => item.id !== id))} />
     </main>
   );
 }
 
 type DashboardProps = {
+  busy: boolean;
   completedRuns: number;
+  createDemo: (demoKey: "lysozyme" | "small-molecule") => void;
   failedRuns: number;
   job: SimulationJob | null;
   runningRuns: number;
   uploadsCount: number;
 };
 
-function DashboardView({ completedRuns, failedRuns, job, runningRuns, uploadsCount }: DashboardProps) {
+function DashboardView({ busy, completedRuns, createDemo, failedRuns, job, runningRuns, uploadsCount }: DashboardProps) {
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-4">
@@ -427,6 +554,16 @@ function DashboardView({ completedRuns, failedRuns, job, runningRuns, uploadsCou
               );
             })}
           </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <button type="button" disabled={busy} onClick={() => createDemo("lysozyme")} className="rounded-lg border border-ocean-200 bg-ocean-50 px-4 py-3 text-left transition hover:border-ocean-500 disabled:opacity-60 dark:border-ocean-900 dark:bg-ocean-950">
+              <span className="block text-sm font-semibold text-ocean-800 dark:text-ocean-100">Create lysozyme tutorial demo</span>
+              <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">Preset from the classic GROMACS lysozyme tutorial workflow.</span>
+            </button>
+            <button type="button" disabled={busy} onClick={() => createDemo("small-molecule")} className="rounded-lg border border-mint-200 bg-mint-50 px-4 py-3 text-left transition hover:border-mint-500 disabled:opacity-60 dark:border-mint-900 dark:bg-mint-950">
+              <span className="block text-sm font-semibold text-mint-800 dark:text-mint-100">Create small molecule demo</span>
+              <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">Fast validation setup using the built-in ligand-style sample.</span>
+            </button>
+          </div>
         </section>
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-4 text-lg font-semibold">Focused Run</h3>
@@ -445,25 +582,47 @@ function DashboardView({ completedRuns, failedRuns, job, runningRuns, uploadsCou
   );
 }
 
+function NotificationStack({ notifications, dismiss }: { notifications: { id: number; tone: "success" | "error" | "info"; message: string }[]; dismiss: (id: number) => void }) {
+  if (notifications.length === 0) return null;
+  const toneClass = {
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100",
+    error: "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-100",
+    info: "border-ocean-200 bg-ocean-50 text-ocean-800 dark:border-ocean-800 dark:bg-ocean-950 dark:text-ocean-100",
+  };
+
+  return (
+    <div className="fixed right-4 top-4 z-50 grid w-[min(420px,calc(100vw-2rem))] gap-2">
+      {notifications.map((item) => (
+        <div key={item.id} className={`flex items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm shadow-soft ${toneClass[item.tone]}`}>
+          <span className="leading-5">{item.message}</span>
+          <button type="button" onClick={() => dismiss(item.id)} className="rounded-md px-2 py-1 text-xs font-semibold opacity-70 transition hover:bg-white/60 hover:opacity-100 dark:hover:bg-slate-900/60">Close</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 type WorkflowProps = {
   activeStep: number;
   busy: boolean;
   canStart: boolean;
   handleFile: (file?: File) => void;
+  health: HealthState | null;
   job: SimulationJob | null;
   parameters: typeof defaults;
   setActiveStep: (step: number) => void;
   setParameters: (parameters: typeof defaults) => void;
-  startSimulation: () => void;
+  startSimulation: (overrides?: Partial<typeof defaults>) => void;
   upload: UploadedCoordinate | null;
   uploads: UploadedCoordinate[];
   selectUpload: (upload: UploadedCoordinate) => void;
   dark: boolean;
 };
 
-function WorkflowView({ activeStep, busy, canStart, handleFile, job, parameters, setActiveStep, setParameters, startSimulation, upload, uploads, selectUpload, dark }: WorkflowProps) {
+function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, parameters, setActiveStep, setParameters, startSimulation, upload, uploads, selectUpload, dark }: WorkflowProps) {
   const selectedStep = steps[activeStep];
-  const configPreview = buildConfigPreview(parameters, upload);
+  const gpuAvailable = Boolean(health?.engine.gpuAvailable);
+  const configPreview = buildConfigPreview(parameters, upload, gpuAvailable);
   const resumeStep = suggestedResumeStep(job);
 
   return (
@@ -521,10 +680,18 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, job, parameters,
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {resumeStep && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200">Resume suggestion: {stepName(resumeStep)}</span>}
-              <SelectField label="Start from" value={parameters.startStep} options={steps.map((step) => step.key)} onChange={(value) => setParameters({ ...parameters, startStep: value as StepKey })} />
             </div>
           </div>
-          <StepOptions activeStep={selectedStep.key} parameters={parameters} setParameters={setParameters} />
+          <div className="mb-5 grid gap-4">
+            <label className="block min-w-0">
+              <span className="field-label">Run name<InfoPopover title="Run name" body="Used in the run list and workspace folder. Renaming a run also renames its stored workspace folder." /></span>
+              <input className="field" value={parameters.runName} onChange={(event) => setParameters({ ...parameters, runName: event.target.value })} />
+            </label>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+              Current step: <span className="font-semibold text-slate-900 dark:text-white">{selectedStep.name}</span>. Run only this step, configure the next step, or launch the complete pipeline from topology through production.
+            </div>
+          </div>
+          <StepOptions activeStep={selectedStep.key} gpuAvailable={gpuAvailable} parameters={parameters} setParameters={setParameters} />
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
@@ -535,16 +702,25 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, job, parameters,
           <div className="mb-4 h-3 rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="h-3 rounded-full bg-gradient-to-r from-ocean-500 to-mint-500 transition-all" style={{ width: `${job?.progress ?? 0}%` }} />
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+          <div className="grid gap-3 xl:grid-cols-[1fr_360px]">
             <div className="grid grid-cols-3 gap-3 text-sm">
               <StatusDatum label="Input" value={upload?.originalName ?? "None"} />
-              <StatusDatum label="Start Step" value={stepName(parameters.startStep)} />
+              <StatusDatum label="Selected Step" value={selectedStep.name} />
               <StatusDatum label="Focused Run" value={job ? `#${job.id}` : "None"} />
             </div>
-            <button className="button-primary min-h-14" type="button" disabled={!canStart || busy} onClick={startSimulation}>
-              <Play size={20} />
-              Start / resume
-            </button>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button className="button-primary min-h-12" type="button" disabled={!canStart || busy} onClick={() => startSimulation({ runMode: "step", startStep: selectedStep.key, runUntil: selectedStep.key })}>
+                <Play size={18} />
+                Run this step
+              </button>
+              <button className="button-primary min-h-12" type="button" disabled={!canStart || busy} onClick={() => startSimulation({ runMode: "pipeline", startStep: "topology", runUntil: "production" })}>
+                <Rocket size={18} />
+                Complete pipeline
+              </button>
+              <button className="button-secondary min-h-12" type="button" onClick={() => setActiveStep(Math.min(activeStep + 1, steps.length - 1))} disabled={activeStep >= steps.length - 1}>
+                Configure next step
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -574,7 +750,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, job, parameters,
   );
 }
 
-function StepOptions({ activeStep, parameters, setParameters }: { activeStep: StepKey; parameters: typeof defaults; setParameters: (parameters: typeof defaults) => void }) {
+function StepOptions({ activeStep, gpuAvailable, parameters, setParameters }: { activeStep: StepKey; gpuAvailable: boolean; parameters: typeof defaults; setParameters: (parameters: typeof defaults) => void }) {
   if (activeStep === "topology") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
@@ -628,14 +804,23 @@ function StepOptions({ activeStep, parameters, setParameters }: { activeStep: St
     );
   }
 
-  if (activeStep === "equilibrate") {
+  if (activeStep === "nvt") {
     return (
       <div className="grid gap-4 xl:grid-cols-2">
-        <SelectField label="Ensemble" value={parameters.ensemble} options={["NVT", "NPT"]} onChange={(value) => setParameters({ ...parameters, ensemble: value })} />
-        <Slider label="Equilibration length" value={parameters.equilibrationPs} min={10} max={1000} step={10} suffix="ps" onChange={(value) => setParameters({ ...parameters, equilibrationPs: value })} />
+        <Slider label="NVT length" help="Constant-volume equilibration duration. The generated nvt.mdp uses position restraints by default." value={parameters.nvtPs} min={10} max={1000} step={10} suffix="ps" onChange={(value) => setParameters({ ...parameters, nvtPs: value })} />
         <Slider label="Temperature" help="MDP ref_t in Kelvin for temperature coupling." value={parameters.temperature} min={250} max={360} step={1} suffix="K" onChange={(value) => setParameters({ ...parameters, temperature: value })} />
-        <Slider label="Pressure" help="MDP ref_p in bar for pressure coupling when the ensemble uses a barostat." value={parameters.pressure} min={0.5} max={2} step={0.1} suffix="bar" onChange={(value) => setParameters({ ...parameters, pressure: value })} />
-        <SelectField label="Thermostat" value={parameters.thermostat} options={["V-rescale", "Berendsen", "Nose-Hoover", "no"]} onChange={(value) => setParameters({ ...parameters, thermostat: value })} />
+        <SelectField label="Thermostat" help="MDP tcoupl. V-rescale is a common equilibration thermostat for biomolecular tutorials." value={parameters.thermostat} options={["V-rescale", "Berendsen", "Nose-Hoover", "no"]} onChange={(value) => setParameters({ ...parameters, thermostat: value })} />
+        <SelectField label="Constraints" help="MDP constraints. Hydrogen-bond constraints allow a 2 fs timestep in many standard workflows." value={parameters.constraints} options={["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
+      </div>
+    );
+  }
+
+  if (activeStep === "npt") {
+    return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Slider label="NPT length" help="Constant-pressure equilibration duration. This stage is where density should settle." value={parameters.nptPs} min={10} max={1000} step={10} suffix="ps" onChange={(value) => setParameters({ ...parameters, nptPs: value })} />
+        <Slider label="Pressure" help="MDP ref_p in bar for pressure coupling." value={parameters.pressure} min={0.5} max={2} step={0.1} suffix="bar" onChange={(value) => setParameters({ ...parameters, pressure: value })} />
+        <Slider label="Target density" help="Analysis reference for density plots in kg/m^3. Water near room temperature is close to 1000 kg/m^3." value={parameters.targetDensity} min={850} max={1150} step={5} suffix="kg/m3" onChange={(value) => setParameters({ ...parameters, targetDensity: value })} />
         <SelectField label="Barostat" value={parameters.barostat} options={["Parrinello-Rahman", "Berendsen", "C-rescale", "no"]} onChange={(value) => setParameters({ ...parameters, barostat: value })} />
       </div>
     );
@@ -643,11 +828,11 @@ function StepOptions({ activeStep, parameters, setParameters }: { activeStep: St
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Slider label="Production length" help="Converted into production.mdp nsteps using length / dt." value={parameters.productionNs} min={1} max={100} step={1} suffix="ns" onChange={(value) => setParameters({ ...parameters, productionNs: value })} />
+      <Slider label="Production length" help="Converted into production.mdp nsteps using length / dt." value={parameters.productionNs} min={0.1} max={100} step={0.1} suffix="ns" onChange={(value) => setParameters({ ...parameters, productionNs: value })} />
       <Slider label="Time step" help="MDP dt in ps. 0.002 ps is a common value when constraining bonds to hydrogen." value={parameters.dt} min={0.001} max={0.004} step={0.001} suffix="ps" onChange={(value) => setParameters({ ...parameters, dt: value })} />
       <Slider label="Output interval" value={parameters.outputEveryPs} min={1} max={100} step={1} suffix="ps" onChange={(value) => setParameters({ ...parameters, outputEveryPs: value })} />
       <SelectField label="Constraints" value={parameters.constraints} options={["h-bonds", "all-bonds", "none"]} onChange={(value) => setParameters({ ...parameters, constraints: value })} />
-      <ToggleField label="Request GPU acceleration" checked={parameters.useGpu} onChange={(value) => setParameters({ ...parameters, useGpu: value })} />
+      <ToggleField label={gpuAvailable ? "Request GPU acceleration" : "GPU unavailable in current engine"} checked={gpuAvailable && parameters.useGpu} disabled={!gpuAvailable} onChange={(value) => setParameters({ ...parameters, useGpu: value })} />
     </div>
   );
 }
@@ -689,56 +874,127 @@ function FilesView({ handleFile, selectUpload, upload, uploads }: { handleFile: 
   );
 }
 
-function RunsView({ job, runs, selectRun }: { job: SimulationJob | null; runs: SimulationJob[]; selectRun: (runId: number, view?: ViewKey) => void }) {
+function RunsView({ job, runs, removeRun, selectRun }: { job: SimulationJob | null; runs: SimulationJob[]; removeRun: (runId: number) => void; selectRun: (runId: number, view?: ViewKey) => void }) {
+  const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
+  const groups = groupRuns(runs);
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white shadow-soft dark:border-slate-800 dark:bg-slate-900">
-      <div className="grid grid-cols-[100px_1fr_130px_120px_180px] border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase text-slate-500 dark:border-slate-800 dark:text-slate-400">
+      <div className="grid grid-cols-[90px_1.1fr_1fr_130px_110px_100px_170px_110px] border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase text-slate-500 dark:border-slate-800 dark:text-slate-400">
         <span>Run</span>
+        <span>Name</span>
         <span>Input</span>
         <span>Status</span>
         <span>Progress</span>
+        <span>Steps</span>
         <span>Created</span>
+        <span>Actions</span>
       </div>
       <div className="max-h-[calc(100vh-150px)] overflow-auto">
-        {runs.map((run) => (
-          <button
-            key={run.id}
-            type="button"
-            onClick={() => selectRun(run.id, "results")}
-            className={`grid w-full grid-cols-[100px_1fr_130px_120px_180px] items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-slate-50 dark:hover:bg-slate-800 ${job?.id === run.id ? "bg-ocean-50 dark:bg-ocean-950" : ""}`}
-          >
-            <span className="font-semibold">#{run.id}</span>
-            <span className="truncate">{run.upload.originalName}</span>
-            <span><span className={statusClass(run.status)}>{run.status}</span></span>
-            <span>{run.progress}%</span>
-            <span className="text-slate-500 dark:text-slate-400">{formatRunTime(run.createdAt)}</span>
-          </button>
-        ))}
+        {groups.map((group) => {
+          const expanded = Boolean(expandedGroups[group.id]);
+          const focused = group.steps.some((run) => run.id === job?.id);
+          return (
+            <div key={group.id} className={`border-b border-slate-100 dark:border-slate-800 ${focused ? "bg-ocean-50/70 dark:bg-ocean-950/60" : ""}`}>
+              <div className="grid grid-cols-[90px_1.1fr_1fr_130px_110px_100px_170px_110px] items-center gap-3 px-4 py-3 text-sm">
+                <button type="button" className="flex items-center gap-2 text-left font-semibold" onClick={() => setExpandedGroups((current) => ({ ...current, [group.id]: !expanded }))}>
+                  <ChevronRight size={16} className={`transition ${expanded ? "rotate-90" : ""}`} />
+                  #{group.id}
+                </button>
+                <button type="button" onClick={() => selectRun(group.latest.id, "results")} className="truncate text-left font-medium hover:text-ocean-700 dark:hover:text-ocean-200">{group.name}</button>
+                <span className="truncate">{group.input}</span>
+                <span><span className={statusClass(group.status)}>{group.status}</span></span>
+                <span>{group.progress}%</span>
+                <span>{group.steps.length}</span>
+                <span className="text-slate-500 dark:text-slate-400">{formatRunTime(group.createdAt)}</span>
+                <span className="flex gap-1">
+                  <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-ocean-700 hover:bg-ocean-50 dark:text-ocean-200 dark:hover:bg-ocean-950" onClick={() => selectRun(group.latest.id, "results")}>Open</button>
+                  <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950" onClick={() => removeRun(group.latest.id)}>Delete</button>
+                </span>
+              </div>
+              {expanded && (
+                <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="grid grid-cols-[90px_150px_130px_110px_1fr_170px] gap-3 border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                    <span>Job</span>
+                    <span>Step</span>
+                    <span>Status</span>
+                    <span>Progress</span>
+                    <span>Current State</span>
+                    <span>Created</span>
+                  </div>
+                  {group.steps.map((run) => (
+                    <button key={run.id} type="button" onClick={() => selectRun(run.id, "results")} className={`grid w-full grid-cols-[90px_150px_130px_110px_1fr_170px] items-center gap-3 px-3 py-2 text-left text-sm hover:bg-white dark:hover:bg-slate-900 ${job?.id === run.id ? "bg-white dark:bg-slate-900" : ""}`}>
+                      <span className="font-semibold">#{run.id}</span>
+                      <span>{stepName(runStepKey(run))}</span>
+                      <span><span className={statusClass(run.status)}>{run.status}</span></span>
+                      <span>{run.progress}%</span>
+                      <span className="truncate">{run.currentStep}</span>
+                      <span className="text-slate-500 dark:text-slate-400">{formatRunTime(run.createdAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function ResultsView({ job, logs, selectRun, dark }: { job: SimulationJob | null; logs: string[]; selectRun: (runId: number, view?: ViewKey) => void; dark: boolean; }) {
+function ResultsView({ cancelRun, configureNextStep, job, logs, notify, renameRun, selectRun, dark }: { cancelRun: (runId: number) => void; configureNextStep: (run: SimulationJob) => void; job: SimulationJob | null; logs: string[]; notify: (tone: "success" | "error" | "info", message: string) => void; renameRun: (runId: number, name: string) => void; selectRun: (runId: number, view?: ViewKey) => void; dark: boolean; }) {
+  const [runNameDraft, setRunNameDraft] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [selectedArtifact, setSelectedArtifact] = useState<ArtifactFile | null>(null);
+  const [artifactText, setArtifactText] = useState("");
+  const [artifactBusy, setArtifactBusy] = useState(false);
+
+  useEffect(() => {
+    if (job) setRunNameDraft(job.name || `Run #${job.id}`);
+  }, [job?.id, job?.name]);
+
   if (!job) {
     return <EmptyState title="No run selected" detail="Open Simulation Runs and choose a run to inspect results, logs, and output files." />;
   }
 
   const logFiles = [
-    { name: "live-stream.log", detail: "Captured pipeline event stream", href: logHistoryUrl(job.id) },
+    { name: "run-events.json", detail: "Clean event stream shown in the log window", href: logHistoryUrl(job.id) },
     { name: `run-${job.id}-summary.json`, detail: "Run metadata and metric payload", href: `/api/simulations/${job.id}/` }
   ];
+  const artifactFiles = job.artifactFiles ?? [];
+  const activeStepKey = (job.parameters.startStep as string | undefined) ?? [...job.metrics].reverse().find((metric) => metric.stage)?.stage ?? "topology";
+  const producedFiles = artifactFiles.filter((file) => file.kind === "structure" || file.kind === "analysis" || file.kind === "config");
+  const chartSeries = [
+    { key: "potential", label: "Potential Energy", color: "#0891b2", fill: "#cffafe", unit: "kJ/mol" },
+    { key: "totalEnergy", label: "Total Energy", color: "#2563eb", fill: "#dbeafe", unit: "kJ/mol" },
+    { key: "kineticEnergy", label: "Kinetic Energy", color: "#7c3aed", fill: "#ede9fe", unit: "kJ/mol" },
+    { key: "energy", label: "Energy", color: "#0f766e", fill: "#ccfbf1", unit: "kJ/mol" },
+    { key: "temperature", label: "Temperature", color: "#10b981", fill: "#d1fae5", unit: "K" },
+    { key: "pressure", label: "Pressure", color: "#f59e0b", fill: "#fef3c7", unit: "bar" },
+    { key: "density", label: "Density", color: "#ef4444", fill: "#fee2e2", unit: "kg/m3" }
+  ];
+  const stageOptions = ["all", ...Array.from(new Set(job.metrics.map((metric) => metric.stage).filter(Boolean)))] as string[];
+  const plottedMetrics = stageFilter === "all" ? job.metrics : job.metrics.filter((metric) => metric.stage === stageFilter);
+  const canCancel = job.status === "queued" || job.status === "running";
 
   return (
     <div className="grid h-full min-h-[780px] gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(480px,0.75fr)]">
       <section className="flex min-h-0 flex-col gap-4">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold">Run #{job.id} Results</h3>
+            <div className="min-w-0 flex-1">
+              <div className="flex max-w-xl items-center gap-2">
+                <input className="field" value={runNameDraft} onChange={(event) => setRunNameDraft(event.target.value)} />
+                <button type="button" className="button-secondary h-[2.35rem] whitespace-nowrap" onClick={() => renameRun(job.id, runNameDraft)}>Rename</button>
+              </div>
               <p className="text-sm text-slate-500 dark:text-slate-400">{job.upload.originalName}</p>
             </div>
-            <span className={statusClass(job.status)}>{job.status}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={job.executionMode === "development-fallback" ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200" : "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200"}>
+                {executionModeLabel(job.executionMode)}
+              </span>
+              <span className={statusClass(job.status)}>{job.status}</span>
+            </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
             <StatusDatum label="Progress" value={`${job.progress}%`} />
@@ -746,22 +1002,95 @@ function ResultsView({ job, logs, selectRun, dark }: { job: SimulationJob | null
             <StatusDatum label="Started" value={job.startedAt ? formatRunTime(job.startedAt) : "Not started"} />
             <StatusDatum label="Finished" value={job.finishedAt ? formatRunTime(job.finishedAt) : "Pending"} />
           </div>
+          {canCancel && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  <span className="block font-semibold">Run is active</span>
+                  <span className="text-xs">{job.processPid ? `GROMACS process PID ${job.processPid}` : "Waiting for the next GROMACS process to start."}</span>
+                </span>
+                <button type="button" className="rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white shadow-soft hover:bg-rose-700" onClick={() => cancelRun(job.id)}>Cancel run</button>
+              </div>
+            </div>
+          )}
+          {job.error && (
+            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
+              <span className="block font-semibold">Run error</span>
+              <span className="mt-1 block whitespace-pre-wrap break-words">{job.error}</span>
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" className="button-primary" onClick={() => configureNextStep(job)} disabled={activeStepKey === "production"}>Configure next step</button>
+            <button type="button" className="button-secondary" onClick={() => selectRun(job.id, "results")}>Refresh run</button>
+          </div>
+          <div className="mt-4 flex max-w-2xl flex-wrap items-end gap-3">
+            <SelectField label="Plot stage" help="Filter all analysis plots to one stage, or show the whole run." value={stageFilter} options={stageOptions} onChange={setStageFilter} />
+            <button type="button" className="button-secondary h-[2.35rem]" onClick={() => downloadAllMetricsCsv(`${job.name}-metrics-${stageFilter}.csv`, plottedMetrics)}>Export All Metrics</button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">Step Files</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Produced by {stepName(activeStepKey as StepKey)}</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">{producedFiles.length}</span>
+            </div>
+            <div className="max-h-96 space-y-2 overflow-auto">
+              {producedFiles.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">No files have been produced yet.</p> : producedFiles.map((file) => (
+                <button key={`${file.kind}-${file.url}`} type="button" onClick={async () => {
+                  setArtifactBusy(true);
+                  setSelectedArtifact(file);
+                  try {
+                    const data = await readArtifact(job.id, file);
+                    setArtifactText(data.content);
+                  } catch (err) {
+                    notify("error", err instanceof Error ? err.message : "Could not open file");
+                    setArtifactText("");
+                  } finally {
+                    setArtifactBusy(false);
+                  }
+                }} className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition hover:border-ocean-400 hover:bg-ocean-50 dark:hover:bg-ocean-950 ${selectedArtifact?.url === file.url ? "border-ocean-500 bg-ocean-50 dark:bg-ocean-950" : "border-slate-200 dark:border-slate-700"}`}>
+                  <span className="block truncate font-semibold">{file.name}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{file.kind}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">{selectedArtifact ? selectedArtifact.name : "File Preview"}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{selectedArtifact ? selectedArtifact.kind : "Select a produced file to inspect or edit it."}</p>
+              </div>
+              <div className="flex gap-2">
+                {selectedArtifact && <a className="button-secondary" href={selectedArtifact.url} target="_blank" rel="noreferrer">Open</a>}
+                <button type="button" className="button-primary" disabled={!selectedArtifact || artifactBusy} onClick={async () => {
+                  if (!selectedArtifact) return;
+                  setArtifactBusy(true);
+                  try {
+                    await saveArtifact(job.id, selectedArtifact, artifactText);
+                    notify("success", `Saved ${selectedArtifact.name}.`);
+                  } catch (err) {
+                    notify("error", err instanceof Error ? err.message : "Could not save file");
+                  } finally {
+                    setArtifactBusy(false);
+                  }
+                }}>Save</button>
+              </div>
+            </div>
+            <textarea className="h-96 w-full resize-y rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-5 text-mint-100 outline-none focus:border-ocean-400 dark:border-slate-800" value={artifactText} onChange={(event) => setArtifactText(event.target.value)} placeholder={artifactBusy ? "Loading..." : "Select a file to preview it here."} />
+          </section>
         </div>
 
         <div className="grid min-h-0 flex-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-3 text-base font-semibold">Energy Trace</h3>
-            <div className="h-[360px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={job.metrics}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="progress" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="energy" stroke="#0891b2" fill="#cffafe" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="grid gap-4">
+            {chartSeries.filter((series) => plottedMetrics.some((metric) => Number.isFinite(Number(metric[series.key])))).map((series) => (
+              <PlotCard key={series.key} jobName={job.name} metrics={plottedMetrics} series={series} stageFilter={stageFilter} />
+            ))}
+            {plottedMetrics.length === 0 && <EmptyState title="No plot data yet" detail="Plots appear as GROMACS writes energy data during minimization, equilibration, or production." />}
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -780,10 +1109,10 @@ function ResultsView({ job, logs, selectRun, dark }: { job: SimulationJob | null
 
       <aside className="flex min-h-0 flex-col gap-4">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="mb-3 text-base font-semibold">Log Files</h3>
+          <h3 className="mb-3 text-base font-semibold">Run Files</h3>
           <div className="space-y-2">
-            {logFiles.map((file) => (
-              <a key={file.name} href={file.href} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm transition hover:border-ocean-500 hover:bg-ocean-50 dark:border-slate-700 dark:hover:bg-ocean-950">
+            {[...logFiles, ...artifactFiles.map((file) => ({ name: file.name, detail: file.kind, href: file.url }))].map((file) => (
+              <a key={`${file.name}-${file.href}`} href={file.href} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm transition hover:border-ocean-500 hover:bg-ocean-50 dark:border-slate-700 dark:hover:bg-ocean-950">
                 <TerminalSquare size={18} className="text-ocean-600" />
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{file.name}</span>
@@ -795,11 +1124,92 @@ function ResultsView({ job, logs, selectRun, dark }: { job: SimulationJob | null
         </div>
         <div className="min-h-0 flex-1 rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-3 text-base font-semibold">Log Window</h3>
-          <div className="h-[calc(100%-32px)] min-h-80 overflow-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-mint-100">
-            {logs.length === 0 ? <div>No logs captured for this run yet.</div> : logs.map((line, index) => <div key={`${line}-${index}`}>{line}</div>)}
+          <div className="h-[calc(100%-32px)] min-h-80 overflow-auto rounded-lg bg-slate-950 p-3 font-mono text-xs leading-5 text-mint-100">
+            {logs.length === 0 ? <div>No logs captured for this run yet.</div> : logs.map((line, index) => (
+              <div key={`${line}-${index}`} className={`whitespace-pre-wrap break-words ${line.toLowerCase().includes("failed") || line.toLowerCase().includes("error details") ? "text-rose-200" : ""}`}>{line}</div>
+            ))}
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+type PlotSeries = {
+  key: string;
+  label: string;
+  color: string;
+  fill: string;
+  unit: string;
+};
+
+function PlotCard({ jobName, metrics, series, stageFilter }: { jobName: string; metrics: SimulationJob["metrics"]; series: PlotSeries; stageFilter: string }) {
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [title, setTitle] = useState(`${series.label} Trace`);
+  const [scaleMode, setScaleMode] = useState("auto");
+  const [styleMode, setStyleMode] = useState("area");
+  const [showGrid, setShowGrid] = useState(true);
+  const [showPoints, setShowPoints] = useState(false);
+  const [color, setColor] = useState(series.color);
+  const xKey = metrics.some((metric) => Number.isFinite(Number(metric.timePs))) ? "timePs" : metrics.some((metric) => Number.isFinite(Number(metric.sample))) ? "sample" : "progress";
+  const xLabel = xKey === "timePs" ? "Time (ps)" : xKey === "sample" ? "Sample" : "Progress (%)";
+  const chartData: SimulationJob["metrics"] = metrics.filter((metric) => Number.isFinite(Number(metric[series.key]))).map((metric, index) => ({ ...metric, sample: metric.sample ?? index + 1 }));
+  const values = chartData.map((metric) => Number(metric[series.key])).filter((value) => Number.isFinite(value));
+  const latest = values.length ? values[values.length - 1] : null;
+  const min = values.length ? Math.min(...values) : null;
+  const max = values.length ? Math.max(...values) : null;
+  const yDomain: [number | string, number | string] = scaleMode === "zero" ? [0, "auto"] : scaleMode === "tight" && min !== null && max !== null ? [Math.floor(min), Math.ceil(max)] : ["auto", "auto"];
+  const palette = ["#0891b2", "#10b981", "#f59e0b", "#7c3aed", "#ef4444", "#334155"];
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-3 grid gap-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <input className="field mb-2" value={title} onChange={(event) => setTitle(event.target.value)} aria-label={`${series.label} plot title`} />
+          <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">stage: {stageFilter}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">points: {chartData.length}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">latest: {latest === null ? "n/a" : `${latest.toFixed(2)} ${series.unit}`}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">range: {min === null || max === null ? "n/a" : `${min.toFixed(2)}-${max.toFixed(2)}`}</span>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 2xl:min-w-[360px]">
+          <div className="flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+            {["area", "line"].map((mode) => (
+              <button key={mode} type="button" onClick={() => setStyleMode(mode)} className={`flex-1 rounded-md px-2 py-1 text-xs font-semibold ${styleMode === mode ? "bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white" : "text-slate-500"}`}>{mode}</button>
+            ))}
+          </div>
+          <select className="field h-9" value={scaleMode} onChange={(event) => setScaleMode(event.target.value)} aria-label={`${series.label} y scale`}>
+            <option value="auto">auto scale</option>
+            <option value="tight">tight scale</option>
+            <option value="zero">zero baseline</option>
+          </select>
+          <div className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 dark:border-slate-700">
+            {palette.map((swatch) => (
+              <button key={swatch} type="button" onClick={() => setColor(swatch)} className={`h-5 w-5 rounded-full border-2 ${color === swatch ? "border-slate-900 dark:border-white" : "border-transparent"}`} style={{ backgroundColor: swatch }} aria-label={`Use ${swatch}`} />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowGrid((value) => !value)} className={`button-secondary h-9 flex-1 ${showGrid ? "border-ocean-400 text-ocean-700" : ""}`}>Grid</button>
+            <button type="button" onClick={() => setShowPoints((value) => !value)} className={`button-secondary h-9 flex-1 ${showPoints ? "border-ocean-400 text-ocean-700" : ""}`}>Points</button>
+          </div>
+        </div>
+      </div>
+      <div ref={chartRef} className="h-72 rounded-lg border border-slate-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-950">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 8, right: 20, bottom: 32, left: 28 }}>
+            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />}
+            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} label={{ value: xLabel, position: "insideBottom", offset: -22, fontSize: 12 }} />
+            <YAxis tick={{ fontSize: 11 }} domain={yDomain as any} label={{ value: `${series.label} (${series.unit})`, angle: -90, position: "insideLeft", offset: -18, fontSize: 12 }} />
+            <Tooltip formatter={(value) => [`${Number(value).toFixed(3)} ${series.unit}`, title]} labelFormatter={(label) => `${xLabel}: ${label}`} />
+            <Area type="monotone" dataKey={series.key} stroke={color} fill={color} fillOpacity={styleMode === "area" ? 0.18 : 0} strokeWidth={2.4} dot={showPoints ? { r: 2.5 } : false} activeDot={{ r: 4 }} connectNulls />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <button type="button" className="button-secondary" onClick={() => downloadCsv(`${jobName}-${series.key}-${stageFilter}.csv`, chartData, series.key)}>Export CSV</button>
+        <button type="button" className="button-secondary" onClick={() => downloadChartSvg(`${jobName}-${series.key}-${stageFilter}.svg`, chartRef.current)}>Export SVG</button>
+      </div>
     </div>
   );
 }
@@ -1046,7 +1456,15 @@ function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dark: bool
   const [authError, setAuthError] = useState("");
   const [registered, setRegistered] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [versionInfo, setVersionInfo] = useState<{ version: string } | null>(null);
   const isRegister = mode === "register";
+
+  useEffect(() => {
+    fetch("/version.json")
+      .then((response) => response.json())
+      .then(setVersionInfo)
+      .catch(() => undefined);
+  }, []);
 
   function switchMode(next: "login" | "register") {
     setMode(next);
@@ -1088,7 +1506,7 @@ function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dark: bool
             <Network className="text-ocean-300" size={22} />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">GROWebby</h1>
+            <h1 className="text-xl font-bold tracking-tight">GROWebby {versionInfo ? <span className="text-sm font-medium text-slate-400">v{versionInfo.version}</span> : null}</h1>
             <p className="text-xs text-slate-400">Molecular Dynamics Console</p>
           </div>
         </div>
@@ -1130,7 +1548,7 @@ function AuthScreen({ dark, setDark, setSession, onAuthenticated }: { dark: bool
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-ocean-100 text-ocean-700 dark:bg-ocean-900 dark:text-ocean-300">
                 <Network size={18} />
               </div>
-              <span className="font-bold">GROWebby</span>
+              <span className="font-bold">GROWebby {versionInfo ? <span className="text-xs font-medium text-slate-500">v{versionInfo.version}</span> : null}</span>
             </div>
             <div className="ml-auto">
               <ThemeToggle dark={dark} onToggle={() => setDark(!dark)} />
@@ -1218,7 +1636,7 @@ function Slider({ label, help, value, min, max, step, suffix, onChange }: Slider
   return (
     <label className="space-y-2">
       <span className="flex items-center justify-between gap-3 text-sm font-medium">
-        <span className="inline-flex items-center gap-2">{label}{help && <InfoPopover title={label} body={help} />}</span>
+        <span className="field-label">{label}{help && <InfoPopover title={label} body={help} />}</span>
         <span className="text-ocean-700 dark:text-ocean-200">{value}{suffix}</span>
       </span>
       <input className="w-full accent-ocean-600" type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
@@ -1229,7 +1647,7 @@ function Slider({ label, help, value, min, max, step, suffix, onChange }: Slider
 function SelectField({ label, help, value, options, onChange }: { label: string; help?: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return (
     <label className="space-y-2">
-      <span className="inline-flex items-center gap-2 text-sm font-medium">{label}{help && <InfoPopover title={label} body={help} />}</span>
+      <span className="field-label">{label}{help && <InfoPopover title={label} body={help} />}</span>
       <select className="field" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
@@ -1240,17 +1658,17 @@ function SelectField({ label, help, value, options, onChange }: { label: string;
 function NumberField({ label, help, value, min, step, onChange }: { label: string; help?: string; value: number; min: number; step: number; onChange: (value: number) => void }) {
   return (
     <label className="space-y-2">
-      <span className="inline-flex items-center gap-2 text-sm font-medium">{label}{help && <InfoPopover title={label} body={help} />}</span>
+      <span className="field-label">{label}{help && <InfoPopover title={label} body={help} />}</span>
       <input className="field" type="number" min={min} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
   );
 }
 
-function ToggleField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function ToggleField({ label, checked, disabled = false, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex min-h-11 items-center justify-between gap-4 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-700">
+    <label className={`flex min-h-11 items-center justify-between gap-4 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium dark:border-slate-700 ${disabled ? "cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-950 dark:text-slate-500" : ""}`}>
       <span>{label}</span>
-      <input className="h-5 w-5 accent-ocean-600" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input className="h-5 w-5 accent-ocean-600 disabled:accent-slate-300" type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     </label>
   );
 }
@@ -1271,12 +1689,12 @@ function InfoPopover({ title, body }: { title: string; body: string }) {
         <HelpCircle size={14} />
       </button>
       {open && (
-        <span className="absolute left-0 top-8 z-30 w-80 rounded-lg border border-slate-200 bg-white p-3 text-left text-sm font-normal text-slate-600 shadow-soft dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-          <span className="mb-2 flex items-center justify-between gap-3">
-            <span className="font-semibold text-slate-900 dark:text-slate-100">{title}</span>
+        <span className="absolute right-0 top-8 z-30 max-h-72 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-left text-sm font-normal text-slate-600 shadow-soft dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:left-0 sm:right-auto">
+          <span className="mb-2 flex items-start justify-between gap-3">
+            <span className="min-w-0 break-words font-semibold text-slate-900 dark:text-slate-100">{title}</span>
             <button type="button" onClick={() => setOpen(false)} className="rounded-md px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">Close</button>
           </span>
-          {body}
+          <span className="block whitespace-normal break-words leading-5">{body}</span>
         </span>
       )}
     </span>
@@ -1451,11 +1869,126 @@ function stepName(key: StepKey): string {
   return steps.find((step) => step.key === key)?.name ?? key;
 }
 
+function executionModeLabel(mode: string): string {
+  if (!mode || mode === "unknown") return "GROMACS";
+  if (mode === "development-fallback") return "Demo/fallback";
+  if (mode.includes("2026.2")) return "GROMACS 2026.2";
+  if (mode.includes("native-opencl")) return "GROMACS OpenCL";
+  if (mode.includes("cuda")) return "GROMACS CUDA";
+  return mode.replace(/^real-gromacs:.*/, "GROMACS");
+}
+
+type RunGroup = {
+  id: number;
+  name: string;
+  input: string;
+  status: SimulationJob["status"];
+  progress: number;
+  createdAt: string;
+  latest: SimulationJob;
+  steps: SimulationJob[];
+};
+
+function runStepKey(run: SimulationJob): StepKey {
+  const explicit = String(run.step || run.parameters.startStep || run.parameters.runUntil || run.currentStep || "");
+  return stepKeyFromName(explicit);
+}
+
+function groupRuns(runs: SimulationJob[]): RunGroup[] {
+  const byGroup = new Map<number, SimulationJob[]>();
+  for (const run of runs) {
+    const groupId = Number(run.runGroupId || run.id);
+    byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), run]);
+  }
+
+  const statusPriority: SimulationJob["status"][] = ["failed", "running", "queued", "cancelled", "completed"];
+  return Array.from(byGroup.entries())
+    .map(([id, groupedRuns]) => {
+      const stepsInOrder = [...groupedRuns].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
+      const latest = [...groupedRuns].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0] ?? stepsInOrder[0];
+      const status = statusPriority.find((candidate) => groupedRuns.some((run) => run.status === candidate)) ?? latest.status;
+      const progress = Math.max(...groupedRuns.map((run) => run.progress ?? 0));
+      return {
+        id,
+        name: latest.name || `Run #${id}`,
+        input: latest.upload.originalName,
+        status,
+        progress,
+        createdAt: stepsInOrder[0]?.createdAt ?? latest.createdAt,
+        latest,
+        steps: stepsInOrder
+      };
+    })
+    .sort((left, right) => new Date(right.latest.updatedAt).getTime() - new Date(left.latest.updatedAt).getTime());
+}
+
+function makeRunName(inputName = "simulation"): string {
+  const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const base = inputName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "simulation";
+  return `${base} ${stamp}`;
+}
+
+function normalizeRunParameters(parameters: typeof defaults): typeof defaults {
+  const runMode = parameters.runMode === "pipeline" ? "pipeline" : "step";
+  const startStep = runMode === "pipeline" ? "topology" : parameters.startStep;
+  const runUntil = runMode === "pipeline" ? "production" : startStep;
+  return {
+    ...parameters,
+    runName: parameters.runName.trim() || makeRunName(),
+    runMode,
+    startStep,
+    runUntil
+  };
+}
+
+function downloadCsv(filename: string, metrics: SimulationJob["metrics"], valueKey: string) {
+  const safeName = filename.replace(/[^\w.-]+/g, "_");
+  const rows = ["stage,progress,sample,timePs,value"];
+  rows.push(...metrics.map((metric) => `${metric.stage ?? ""},${metric.progress},${metric.sample ?? ""},${metric.timePs ?? ""},${metric[valueKey] ?? ""}`));
+  const blob = new Blob([`${rows.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = safeName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadAllMetricsCsv(filename: string, metrics: SimulationJob["metrics"]) {
+  const safeName = filename.replace(/[^\w.-]+/g, "_");
+  const preferred = ["stage", "progress", "sample", "timePs", "energy", "potential", "totalEnergy", "kineticEnergy", "temperature", "pressure", "density"];
+  const columns = [...preferred.filter((key) => metrics.some((metric) => metric[key] !== undefined)), ...Array.from(new Set(metrics.flatMap((metric) => Object.keys(metric)))).filter((key) => !preferred.includes(key)).sort()];
+  const rows = [columns.join(",")];
+  rows.push(...metrics.map((metric) => columns.map((column) => metric[column] ?? "").join(",")));
+  const blob = new Blob([`${rows.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = safeName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadChartSvg(filename: string, container: HTMLDivElement | null) {
+  const svg = container?.querySelector("svg");
+  if (!svg) return;
+  const clone = svg.cloneNode(true) as SVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.replace(/[^\w.-]+/g, "_");
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function suggestedResumeStep(job: SimulationJob | null): StepKey | null {
   if (!job || job.status === "completed") return null;
   if (job.status === "failed") return stepKeyFromName(job.currentStep);
   if (job.progress >= 82) return "production";
-  if (job.progress >= 66) return "equilibrate";
+  if (job.progress >= 76) return "npt";
+  if (job.progress >= 66) return "nvt";
   if (job.progress >= 50) return "minimize";
   if (job.progress >= 38) return "ions";
   if (job.progress >= 24) return "solvation";
@@ -1466,7 +1999,8 @@ function suggestedResumeStep(job: SimulationJob | null): StepKey | null {
 function stepKeyFromName(name: string): StepKey {
   const normalized = name.toLowerCase();
   if (normalized.includes("production")) return "production";
-  if (normalized.includes("equil")) return "equilibrate";
+  if (normalized.includes("npt")) return "npt";
+  if (normalized.includes("nvt") || normalized.includes("equil")) return "nvt";
   if (normalized.includes("minim")) return "minimize";
   if (normalized.includes("ion")) return "ions";
   if (normalized.includes("solv")) return "solvation";
@@ -1474,12 +2008,17 @@ function stepKeyFromName(name: string): StepKey {
   return "topology";
 }
 
-function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordinate | null): string {
+function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordinate | null, gpuAvailable = false): string {
   const input = upload?.originalName ?? "<select-or-upload-coordinate-file>";
+  const useGpu = parameters.useGpu && gpuAvailable;
   const prefix = [
     "# GROWebby generated GROMACS workflow preview",
+    `# run_name = ${parameters.runName || "<unnamed-run>"}`,
+    `# run_mode = ${parameters.runMode}`,
     `# input = ${input}`,
     `# start_step = ${parameters.startStep}`,
+    `# run_until = ${parameters.runUntil}`,
+    `# gpu_acceleration = ${useGpu ? "enabled" : parameters.useGpu ? "requested but unavailable in current engine" : "disabled"}`,
     "",
     "[commands]",
     `gmx pdb2gmx -f ${input} -o processed.gro -p topol.top -ff ${parameters.forceField} -water ${parameters.waterModel}${parameters.ignoreHydrogens ? " -ignh" : ""}${parameters.termini === "interactive" ? "" : ` -ter`}`,
@@ -1488,11 +2027,14 @@ function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordin
     "gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr",
     `gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname ${parameters.positiveIon} -nname ${parameters.negativeIon}${parameters.neutralize ? " -neutral" : ""} -conc ${parameters.saltMolar}`,
     "gmx grompp -f minim.mdp -c ionized.gro -p topol.top -o minim.tpr",
-    "gmx mdrun -deffnm minim",
-    "gmx grompp -f equil.mdp -c minim.gro -p topol.top -o equil.tpr",
-    "gmx mdrun -deffnm equil",
-    "gmx grompp -f production.mdp -c equil.gro -p topol.top -o production.tpr",
-    `gmx mdrun -deffnm production${parameters.useGpu ? " -nb gpu" : ""}`,
+    `gmx mdrun -deffnm minim${useGpu ? " -nb gpu" : ""}`,
+    "gmx grompp -f nvt.mdp -c minim.gro -r minim.gro -p topol.top -o nvt.tpr",
+    `gmx mdrun -deffnm nvt${useGpu ? " -nb gpu" : ""}`,
+    "gmx grompp -f npt.mdp -c nvt.gro -r nvt.gro -t nvt.cpt -p topol.top -o npt.tpr",
+    `gmx mdrun -deffnm npt${useGpu ? " -nb gpu" : ""}`,
+    "gmx energy -f npt.edr -o density.xvg  # select Density",
+    "gmx grompp -f production.mdp -c npt.gro -t npt.cpt -p topol.top -o production.tpr",
+    `gmx mdrun -deffnm production${useGpu ? " -nb gpu" : ""}`,
     "",
     "[minim.mdp]",
     `integrator              = ${parameters.minimizer}`,
@@ -1500,20 +2042,33 @@ function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordin
     `emstep                  = ${parameters.emstep}`,
     `nsteps                  = ${parameters.minimizationSteps}`,
     "",
-    "[equil.mdp]",
+    "[nvt.mdp]",
     "integrator              = md",
-    `nsteps                  = ${Math.round(parameters.equilibrationPs / parameters.dt)}`,
+    `nsteps                  = ${Math.round(parameters.nvtPs / parameters.dt)}`,
     `dt                      = ${parameters.dt}`,
     "define                  = -DPOSRES",
     `tcoupl                  = ${parameters.thermostat}`,
     "tc-grps                 = System",
     "tau_t                   = 0.1",
     `ref_t                   = ${parameters.temperature}`,
-    `pcoupl                  = ${parameters.ensemble === "NPT" ? parameters.barostat : "no"}`,
+    "pcoupl                  = no",
+    `constraints             = ${parameters.constraints}`,
+    "",
+    "[npt.mdp]",
+    "integrator              = md",
+    `nsteps                  = ${Math.round(parameters.nptPs / parameters.dt)}`,
+    `dt                      = ${parameters.dt}`,
+    "define                  = -DPOSRES",
+    `tcoupl                  = ${parameters.thermostat}`,
+    "tc-grps                 = System",
+    "tau_t                   = 0.1",
+    `ref_t                   = ${parameters.temperature}`,
+    `pcoupl                  = ${parameters.barostat}`,
     "pcoupltype              = isotropic",
     "tau_p                   = 2.0",
     `ref_p                   = ${parameters.pressure}`,
     "compressibility         = 4.5e-5",
+    `; target_density_plot_ref = ${parameters.targetDensity} kg/m3`,
     `constraints             = ${parameters.constraints}`,
     "",
     "[production.mdp]",

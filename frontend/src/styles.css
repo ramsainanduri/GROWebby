@@ -45,6 +45,17 @@ body {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
+.field-label {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .field:focus {
   border-color: #06b6d4;
   box-shadow: 0 0 0 3px #cffafe;
@@ -93,6 +104,10 @@ body {
 .dark .field {
   border-color: #334155;
   background: #020617;
+  color: #f8fafc;
+}
+
+.dark .field-label {
   color: #f8fafc;
 }
 

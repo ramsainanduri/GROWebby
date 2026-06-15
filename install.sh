@@ -10,6 +10,7 @@ mkdir -p "$STATE_DIR"
 
 OS_NAME="$(uname -s)"
 ARCH_NAME="$(uname -m)"
+HOST_GMX="$(command -v gmx || true)"
 ENGINE="docker-cpu"
 COMPOSE_PROFILES="cpu"
 EXECUTION_MODE="docker-cpu"
@@ -17,11 +18,19 @@ GROMACS_BINARY=""
 NOTES="CPU Docker engine selected."
 
 if [[ "$OS_NAME" == "Darwin" && "$ARCH_NAME" == "arm64" ]]; then
-  ENGINE="mac-opencl-native"
-  COMPOSE_PROFILES=""
-  EXECUTION_MODE="native-opencl"
-  GROMACS_BINARY="$(command -v gmx || true)"
-  NOTES="Apple Silicon detected. CUDA is unavailable on this platform. Use a native GROMACS OpenCL build for Mac GPU execution; Docker services will run the web app."
+  if [[ -n "$HOST_GMX" ]] && "$HOST_GMX" --version 2>/dev/null | grep -qi "GPU support:.*OpenCL"; then
+    ENGINE="mac-opencl-native"
+    COMPOSE_PROFILES=""
+    EXECUTION_MODE="native-opencl"
+    GROMACS_BINARY="$HOST_GMX"
+    NOTES="Apple Silicon detected with native GROMACS OpenCL support. GROWebby will run the backend on macOS so GROMACS can use the M-series GPU."
+  else
+    ENGINE="docker-backend-cpu"
+    COMPOSE_PROFILES=""
+    EXECUTION_MODE="backend-gmx-2026.2"
+    GROMACS_BINARY="/usr/local/gromacs/bin/gmx"
+    NOTES="Apple Silicon detected, but no native OpenCL-enabled gmx was found. GROWebby will run GROMACS 2026.2 inside Docker with CPU/OpenMP support. Install a native OpenCL GROMACS build to enable the M-series GPU path."
+  fi
 elif command -v nvidia-smi >/dev/null 2>&1; then
   ENGINE="linux-nvidia-cuda"
   COMPOSE_PROFILES="cuda"
@@ -55,11 +64,12 @@ echo "  Host: $OS_NAME $ARCH_NAME"
 echo "  Engine: $ENGINE"
 echo "  Compose profiles: ${COMPOSE_PROFILES:-none}"
 echo "  Execution mode: $EXECUTION_MODE"
-if [[ -n "$GROMACS_BINARY" ]]; then
+if [[ "$ENGINE" == "mac-opencl-native" ]]; then
   echo "  Native gmx: $GROMACS_BINARY"
-elif [[ "$ENGINE" == "mac-opencl-native" ]]; then
-  echo "  Native gmx: not found"
-  echo "  Install a native GROMACS OpenCL build before expecting Mac GPU execution."
+elif [[ "$ENGINE" == "docker-backend-cpu" ]]; then
+  echo "  Container gmx: $GROMACS_BINARY"
+elif [[ -n "$GROMACS_BINARY" ]]; then
+  echo "  Native gmx: $GROMACS_BINARY"
 fi
 echo "  Notes: $NOTES"
 echo
