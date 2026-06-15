@@ -1730,7 +1730,6 @@ function AboutView() {
 
   return (
     <div className="grid gap-6 max-w-3xl">
-      {/* App identity card */}
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-soft dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-ocean-100 text-ocean-600 dark:bg-ocean-900 dark:text-ocean-300">
@@ -1751,12 +1750,17 @@ function AboutView() {
         </div>
         <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
           GROWebby is a local, Dockerized web interface for running GROMACS molecular dynamics workflows
-          through a friendly Django + React UI. Each user gets a private workspace with isolated files,
+          through a Django and React interface. Each user gets a private workspace with isolated files,
           simulation runs, and results.
         </p>
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-950">
+          <span className="block font-semibold text-slate-900 dark:text-slate-100">Developer</span>
+          <a className="mt-1 inline-flex text-ocean-700 hover:underline dark:text-ocean-300" href="https://github.com/ramsainanduri" target="_blank" rel="noreferrer">
+            Ram Sai Nanduri (@ramsainanduri)
+          </a>
+        </div>
       </section>
 
-      {/* Tools & versions */}
       <section className="rounded-xl border border-slate-200 bg-white shadow-soft dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-5 py-3 dark:border-slate-800">
           <h3 className="font-semibold">Component Versions</h3>
@@ -1779,7 +1783,6 @@ function AboutView() {
         )}
       </section>
 
-      {/* Links */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-800 dark:bg-slate-900">
         <h3 className="mb-3 font-semibold">Resources</h3>
         <div className="flex flex-wrap gap-3">
