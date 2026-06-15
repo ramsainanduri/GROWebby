@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from .models import SimulationJob, SimulationLog, UploadedCoordinate
-from .runner import completed_step_available, enqueue_simulation, previous_step_key
+from .runner import completed_step_available, enqueue_simulation, previous_step_key, user_dir_for_job
 
 LYSOZYME_DEMO_PDB = """HEADER    GROWebby lysozyme tutorial validation structure
 ATOM      1  N   LYS A   1      -1.450   0.000   0.000  1.00 20.00           N
@@ -122,7 +122,8 @@ def artifact_relative_path(job: SimulationJob, artifact: dict[str, Any]) -> str:
     if artifact.get("path"):
         return str(artifact["path"]).lstrip("/")
     url_path = unquote(urlparse(str(artifact.get("url", ""))).path)
-    marker = f"/workspaces/{job.workspace_slug}/"
+    user_dir = user_dir_for_job(job)
+    marker = f"/workspaces/{user_dir}/{job.workspace_slug}/"
     if marker not in url_path:
         raise ValueError("Artifact does not belong to this run workspace.")
     return url_path.split(marker, 1)[1]
@@ -130,7 +131,8 @@ def artifact_relative_path(job: SimulationJob, artifact: dict[str, Any]) -> str:
 
 def artifact_file_path(job: SimulationJob, artifact: dict[str, Any]):
     relative = artifact_relative_path(job, artifact)
-    root = (settings.MEDIA_ROOT / "workspaces" / job.workspace_slug).resolve()
+    user_dir = user_dir_for_job(job)
+    root = (settings.MEDIA_ROOT / "workspaces" / user_dir / job.workspace_slug).resolve()
     path = (root / relative).resolve()
     if root not in path.parents and path != root:
         raise ValueError("Artifact path is outside the run workspace.")
@@ -233,9 +235,9 @@ def simulation_detail(_request: HttpRequest, job_id: int) -> JsonResponse:
         group_id = job_run_group_id(job)
         group_jobs = [candidate for candidate in visible_jobs(_request).select_related("upload") if job_run_group_id(candidate) == group_id]
         old_slugs = {candidate.workspace_slug for candidate in group_jobs if candidate.workspace_slug}
-        old_workspace = settings.MEDIA_ROOT / "workspaces" / (job.workspace_slug or workspace_slug(group_id, job.name))
+        old_workspace = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / (job.workspace_slug or workspace_slug(group_id, job.name))
         new_slug = workspace_slug(group_id, new_name)
-        new_workspace = settings.MEDIA_ROOT / "workspaces" / new_slug
+        new_workspace = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / new_slug
         if old_workspace.exists() and old_workspace != new_workspace:
             new_workspace.parent.mkdir(parents=True, exist_ok=True)
             if new_workspace.exists():
@@ -264,7 +266,9 @@ def simulation_detail(_request: HttpRequest, job_id: int) -> JsonResponse:
         for candidate in group_jobs:
             candidate.delete()
         for slug in workspaces:
-            shutil.rmtree(settings.MEDIA_ROOT / "workspaces" / slug, ignore_errors=True)
+            for candidate_job in group_jobs:
+                shutil.rmtree(settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(candidate_job) / slug, ignore_errors=True)
+                break  # all jobs in group share same owner; one removal is enough
         return JsonResponse({"deleted": True, "runGroupId": group_id, "deletedJobs": len(group_jobs)})
     return JsonResponse(job_payload(job))
 
@@ -446,3 +450,81 @@ def simulation_log_history(_request: HttpRequest, job_id: int) -> JsonResponse:
 def uploads(_request: HttpRequest) -> JsonResponse:
     latest = visible_uploads(_request).order_by("-created_at")[:20]
     return JsonResponse({"results": [upload_payload(upload) for upload in latest]})
+
+
+@require_GET
+def gromacs_options(_request: HttpRequest) -> JsonResponse:
+    """
+    Returns all supported force fields, water models, and other dropdown options
+    so the frontend can build fully-populated parameter forms without hardcoding values.
+    """
+    from .runner import FORCE_FIELDS, WATER_MODELS
+    return JsonResponse({
+        "forceFields": [
+            {"value": ff, "label": label, "category": category}
+            for ff, label, category in FORCE_FIELDS
+        ],
+        "waterModels": [
+            {"value": wm, "label": label, "category": category}
+            for wm, label, category in WATER_MODELS
+        ],
+        "boxTypes": [
+            {"value": "dodecahedron",  "label": "Rhombic dodecahedron (recommended for globular proteins)"},
+            {"value": "cubic",         "label": "Cubic"},
+            {"value": "octahedron",    "label": "Truncated octahedron"},
+            {"value": "triclinic",     "label": "Triclinic (custom)"},
+        ],
+        "minimizers": [
+            {"value": "steep",   "label": "Steepest descent (robust, default)"},
+            {"value": "cg",      "label": "Conjugate gradient (slower, more accurate)"},
+            {"value": "l-bfgs",  "label": "L-BFGS quasi-Newton (fastest near minimum)"},
+        ],
+        "thermostats": [
+            {"value": "V-rescale",   "label": "V-rescale (recommended)"},
+            {"value": "Nose-Hoover", "label": "Nosé-Hoover (rigorous canonical ensemble)"},
+            {"value": "Berendsen",   "label": "Berendsen (fast, not rigorous)"},
+            {"value": "Andersen",    "label": "Andersen (stochastic)"},
+            {"value": "no",          "label": "None"},
+        ],
+        "barostats": [
+            {"value": "Parrinello-Rahman", "label": "Parrinello-Rahman (production quality)"},
+            {"value": "C-rescale",         "label": "C-rescale (stochastic, good for equilibration)"},
+            {"value": "Berendsen",         "label": "Berendsen (fast relaxation, equilibration only)"},
+            {"value": "MTTK",              "label": "MTTK (Martyna-Tobias-Klein, rigorous)"},
+            {"value": "no",                "label": "None (NVT)"},
+        ],
+        "constraints": [
+            {"value": "none",       "label": "None"},
+            {"value": "h-bonds",    "label": "H-bonds (recommended for 2 fs)"},
+            {"value": "all-bonds",  "label": "All bonds"},
+            {"value": "h-angles",   "label": "H-bond angles"},
+            {"value": "all-angles", "label": "All angles"},
+        ],
+        "integrators": [
+            {"value": "md",    "label": "md — Leap-frog (default, fastest)"},
+            {"value": "md-vv", "label": "md-vv — Velocity Verlet (energy-conserving)"},
+            {"value": "sd",    "label": "sd — Stochastic dynamics / Langevin"},
+            {"value": "bd",    "label": "bd — Brownian dynamics (coarse-grained)"},
+        ],
+        "coulombTypes": [
+            {"value": "PME",             "label": "PME — Particle Mesh Ewald (recommended)"},
+            {"value": "Cut-off",         "label": "Cut-off"},
+            {"value": "Ewald",           "label": "Ewald (slow, reference)"},
+            {"value": "P3M-AD",          "label": "P3M-AD"},
+            {"value": "Reaction-Field",  "label": "Reaction-Field"},
+        ],
+        "positiveIons": [
+            {"value": "NA", "label": "Sodium (Na⁺)"},
+            {"value": "K",  "label": "Potassium (K⁺)"},
+            {"value": "MG", "label": "Magnesium (Mg²⁺)"},
+            {"value": "CA", "label": "Calcium (Ca²⁺)"},
+            {"value": "ZN", "label": "Zinc (Zn²⁺)"},
+        ],
+        "negativeIons": [
+            {"value": "CL", "label": "Chloride (Cl⁻)"},
+            {"value": "BR", "label": "Bromide (Br⁻)"},
+            {"value": "F",  "label": "Fluoride (F⁻)"},
+            {"value": "I",  "label": "Iodide (I⁻)"},
+        ],
+    })
+

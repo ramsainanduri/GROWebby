@@ -12,4 +12,5 @@ urlpatterns = [
     path("simulations/<int:job_id>/artifacts/", views.simulation_artifact),
     path("simulations/<int:job_id>/logs/", views.simulation_logs),
     path("simulations/<int:job_id>/logs/history/", views.simulation_log_history),
+    path("gromacs-options/", views.gromacs_options),
 ]
