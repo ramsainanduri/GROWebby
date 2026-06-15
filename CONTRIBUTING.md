@@ -124,7 +124,11 @@ cd GROWebby
 cp .env.example .env
 # Edit .env if you need non-default ports or credentials
 
-# 3. Install and start all services
+# 3. Install pre-commit hooks
+pip install pre-commit
+pre-commit install
+
+# 4. Install and start all services
 ./install.sh
 ```
 
