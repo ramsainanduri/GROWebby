@@ -59,7 +59,15 @@ Everything runs on your local machine inside Docker. Your data never leaves your
 
 GROWebby currently uses Django's default SQLite database at `backend/db.sqlite3`. The database stores users, groups, uploaded-file records, simulation jobs, run status, current step, progress, metrics, clean event logs, artifact metadata, run grouping, workspace names, and the active GROMACS process PID while a command is running.
 
-Large files are stored on disk under `backend/media/`, not inside the database. This includes uploaded structures, generated MDP files, GROMACS outputs, trajectories, energy files, and full command logs.
+Large files are stored on disk under `.app_state/media/`, not inside the database. This includes uploaded structures, generated MDP files, GROMACS outputs, trajectories, energy files, and full command logs.
+
+For Docker-based runs, the physical host storage path is:
+
+```text
+<project-root>/.app_state/media/workspaces/<run-workspace-slug>/
+```
+
+The same host directory is mounted in the backend container as `/app/media/workspaces` and in GROMACS engine containers as `/work/workspaces`.
 
 ---
 
@@ -113,6 +121,7 @@ Full documentation is available in [`docs/`](docs/README.md):
 - [Administration and Access Control](docs/administration.md)
 - [Architecture](docs/architecture.md)
 - [Operations and Troubleshooting](docs/operations.md)
+- [Contributing](CONTRIBUTING.md)
 
 ---
 
@@ -254,3 +263,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+## Maintainer
+
+Ram Sai Nanduri (GitHub: [@ramsainanduri](https://github.com/ramsainanduri)).

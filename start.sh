@@ -15,6 +15,8 @@ if [ ! -f .env ]; then
   ./install.sh
 fi
 
+mkdir -p .app_state/media/workspaces .app_state/media/uploads
+
 set -a
 # shellcheck disable=SC1091
 source .env
@@ -51,10 +53,14 @@ if [[ "${GROWEBBY_ENGINE:-}" == "mac-opencl-native" ]]; then
     GROWEBBY_ENGINE="mac-opencl-native" \
     GROMACS_EXECUTION_MODE="native-opencl" \
     GROMACS_BINARY="$GMX_BIN" \
+    GROMACS_WORK_ROOT="../.app_state/media/workspaces" \
+    GROWEBBY_MEDIA_ROOT="../.app_state/media" \
     ../.venv/bin/python manage.py migrate
     GROWEBBY_ENGINE="mac-opencl-native" \
     GROMACS_EXECUTION_MODE="native-opencl" \
     GROMACS_BINARY="$GMX_BIN" \
+    GROMACS_WORK_ROOT="../.app_state/media/workspaces" \
+    GROWEBBY_MEDIA_ROOT="../.app_state/media" \
     nohup ../.venv/bin/python manage.py runserver 0.0.0.0:8000 > ../.app_state/backend.log 2>&1 &
     echo $! > ../.app_state/backend.pid
   )
