@@ -14,6 +14,7 @@ RUN apt-get update \
       curl \
       libfftw3-dev \
       libhwloc-dev \
+      libopenmpi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2026.2.tar.gz -o /tmp/gromacs.tar.gz \
