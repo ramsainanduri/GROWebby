@@ -626,7 +626,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, par
   const resumeStep = suggestedResumeStep(job);
 
   return (
-    <div className="grid h-full min-h-[860px] gap-4 xl:grid-cols-[300px_minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[320px_minmax(0,1fr)_minmax(620px,0.95fr)]">
+    <div className="grid h-full min-h-[960px] gap-4 xl:grid-cols-[300px_minmax(0,1fr)_minmax(520px,0.9fr)] 2xl:grid-cols-[320px_minmax(0,1fr)_minmax(620px,0.95fr)]">
       <aside className="flex min-h-0 flex-col gap-4">
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-3 text-base font-semibold">Input File</h3>
@@ -702,7 +702,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, par
           <div className="mb-4 h-3 rounded-full bg-slate-100 dark:bg-slate-800">
             <div className="h-3 rounded-full bg-gradient-to-r from-ocean-500 to-mint-500 transition-all" style={{ width: `${job?.progress ?? 0}%` }} />
           </div>
-          <div className="grid gap-3 xl:grid-cols-[1fr_360px]">
+          <div className="flex flex-col gap-4">
             <div className="grid grid-cols-3 gap-3 text-sm">
               <StatusDatum label="Input" value={upload?.originalName ?? "None"} />
               <StatusDatum label="Selected Step" value={selectedStep.name} />
@@ -726,7 +726,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, par
       </section>
 
       <aside className="flex min-h-0 flex-col gap-4">
-        <section className="min-h-[380px] rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
+        <section className="min-h-[420px] rounded-lg border border-slate-200 bg-white p-4 shadow-soft dark:border-slate-800 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-semibold">Molecule View</h3>
@@ -734,7 +734,7 @@ function WorkflowView({ activeStep, busy, canStart, handleFile, health, job, par
             </div>
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">MolStar</span>
           </div>
-          <div className="h-[320px]">
+          <div className="h-[360px]">
             <Viewer3D coordinateUrl={upload?.url} dark={dark} />
           </div>
         </section>
