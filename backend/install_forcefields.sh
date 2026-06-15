@@ -40,4 +40,26 @@ if [ ! -d "charmm36.ff" ]; then
     rm charmm36-jul2022.ff.tgz
 fi
 
-echo "CHARMM36 force fields installed successfully."
+# Install amber03ws.ff from bestlab github
+if [ ! -d "amber03ws.ff" ]; then
+    echo "Downloading amber03ws.ff..."
+    curl -sS -L -o bestlab.zip "https://github.com/bestlab/force_fields/archive/refs/heads/master.zip"
+    unzip -q bestlab.zip "force_fields-master/gromacs_format/amber03ws.ff/*" -d /tmp/bestlab || true
+    if [ -d "/tmp/bestlab/force_fields-master/gromacs_format/amber03ws.ff" ]; then
+        mv /tmp/bestlab/force_fields-master/gromacs_format/amber03ws.ff .
+    fi
+    rm -rf bestlab.zip /tmp/bestlab
+fi
+
+# Install amber14sb_OL15.ff from intbio github
+if [ ! -d "amber14sb_OL15.ff" ]; then
+    echo "Downloading amber14sb_OL15.ff..."
+    curl -sS -L -o intbio.zip "https://github.com/intbio/gromacs_ff/archive/refs/heads/master.zip"
+    unzip -q intbio.zip "gromacs_ff-master/amber14sb_OL15.ff/*" -d /tmp/intbio || true
+    if [ -d "/tmp/intbio/gromacs_ff-master/amber14sb_OL15.ff" ]; then
+        mv /tmp/intbio/gromacs_ff-master/amber14sb_OL15.ff .
+    fi
+    rm -rf intbio.zip /tmp/intbio
+fi
+
+echo "Additional force fields installed successfully."
