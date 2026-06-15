@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock3, ServerCog, TerminalSquare } from "lucide-react";
-import { adminApproveUser, adminDenyUser, adminListUsers, AdminUser, SessionState } from "../lib/api";
+import { CheckCircle2, Clock3, ServerCog, TerminalSquare, Plus, Edit2, KeyRound } from "lucide-react";
+import { adminApproveUser, adminDenyUser, adminListUsers, adminCreateUser, adminUpdateUser, adminResetUserPassword, AdminUser, SessionState } from "../lib/api";
 import { MetricCard } from "../components/ui";
 
 export function AdminView({ session }: { session: SessionState }) {
@@ -10,6 +10,16 @@ export function AdminView({ session }: { session: SessionState }) {
   const [working, setWorking] = useState<number | null>(null);
 
   const isAdmin = session.user?.isStaff || session.user?.isSuperuser;
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit" | "password">("create");
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+
+  const [formUsername, setFormUsername] = useState("");
+  const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("");
+  const [formIsAdmin, setFormIsAdmin] = useState(false);
+  const [modalError, setModalError] = useState("");
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -32,13 +42,66 @@ export function AdminView({ session }: { session: SessionState }) {
   }
 
   async function handleDeny(userId: number) {
-    if (!confirm("Delete this user account permanently?")) return;
+    if (!window.confirm("Delete this user account permanently?")) return;
     setWorking(userId);
     try {
       await adminDenyUser(userId);
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch {
       setAdminError("Deny failed.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  function openCreateModal() {
+    setModalMode("create");
+    setEditingUser(null);
+    setFormUsername("");
+    setFormEmail("");
+    setFormPassword("");
+    setFormIsAdmin(false);
+    setModalError("");
+    setShowModal(true);
+  }
+
+  function openEditModal(user: AdminUser) {
+    setModalMode("edit");
+    setEditingUser(user);
+    setFormUsername(user.username);
+    setFormEmail(user.email);
+    setFormPassword("");
+    setFormIsAdmin(user.isSuperuser || user.isStaff);
+    setModalError("");
+    setShowModal(true);
+  }
+
+  function openPasswordModal(user: AdminUser) {
+    setModalMode("password");
+    setEditingUser(user);
+    setFormPassword("");
+    setModalError("");
+    setShowModal(true);
+  }
+
+  async function handleModalSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setModalError("");
+    setWorking(-1);
+    try {
+      if (modalMode === "create") {
+        await adminCreateUser({ username: formUsername, email: formEmail, password: formPassword, isAdmin: formIsAdmin });
+      } else if (modalMode === "edit" && editingUser) {
+        await adminUpdateUser(editingUser.id, { email: formEmail, isAdmin: formIsAdmin });
+      } else if (modalMode === "password" && editingUser) {
+        await adminResetUserPassword(editingUser.id, { password: formPassword });
+      }
+      
+      const updatedUsers = await adminListUsers();
+      setUsers(updatedUsers);
+      setShowModal(false);
+    } catch (err: any) {
+      setModalError(err.message || "Operation failed.");
     } finally {
       setWorking(null);
     }
@@ -120,9 +183,17 @@ export function AdminView({ session }: { session: SessionState }) {
 
       {/* Active users table */}
       <section className="rounded-lg border border-slate-200 bg-white shadow-soft dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-          <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
-          <h3 className="font-semibold">Active Users ({active.length})</h3>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+            <h3 className="font-semibold">Active Users ({active.length})</h3>
+          </div>
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 rounded-lg bg-ocean-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-ocean-700"
+          >
+            <Plus size={14} /> Add New User
+          </button>
         </div>
         {loading ? (
           <p className="p-5 text-sm text-slate-400">Loading…</p>
@@ -156,16 +227,34 @@ export function AdminView({ session }: { session: SessionState }) {
                     </td>
                     <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{new Date(user.dateJoined).toLocaleDateString()}</td>
                     <td className="px-5 py-3">
-                      {!user.isSuperuser && (
+                      <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          disabled={working === user.id}
-                          onClick={() => handleDeny(user.id)}
-                          className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400 disabled:opacity-50"
+                          disabled={working !== null}
+                          onClick={() => openEditModal(user)}
+                          className="flex items-center gap-1 text-xs font-medium text-ocean-600 hover:underline dark:text-ocean-400 disabled:opacity-50"
                         >
-                          Remove
+                          <Edit2 size={12} /> Edit
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          disabled={working !== null}
+                          onClick={() => openPasswordModal(user)}
+                          className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:underline dark:text-amber-400 disabled:opacity-50"
+                        >
+                          <KeyRound size={12} /> Reset
+                        </button>
+                        {!user.isSuperuser && (
+                          <button
+                            type="button"
+                            disabled={working !== null}
+                            onClick={() => handleDeny(user.id)}
+                            className="flex items-center gap-1 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -174,6 +263,86 @@ export function AdminView({ session }: { session: SessionState }) {
           </div>
         )}
       </section>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-4 text-xl font-bold">
+              {modalMode === "create" && "Add New User"}
+              {modalMode === "edit" && "Edit User"}
+              {modalMode === "password" && "Reset Password"}
+            </h2>
+            {modalError && <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-200">{modalError}</p>}
+            <form onSubmit={handleModalSubmit} className="flex flex-col gap-4">
+              {modalMode === "create" && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Username</label>
+                  <input
+                    required
+                    type="text"
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700"
+                  />
+                </div>
+              )}
+              {modalMode !== "password" && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Email</label>
+                  <input
+                    required
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700"
+                  />
+                </div>
+              )}
+              {modalMode !== "edit" && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Password</label>
+                  <input
+                    required
+                    type="password"
+                    minLength={8}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700"
+                  />
+                </div>
+              )}
+              {modalMode !== "password" && (
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={formIsAdmin}
+                    onChange={(e) => setFormIsAdmin(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-ocean-600 focus:ring-ocean-500 dark:border-slate-700 dark:bg-slate-800"
+                  />
+                  Is Admin (Superuser)
+                </label>
+              )}
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={working === -1}
+                  className="rounded-lg bg-ocean-600 px-4 py-2 text-sm font-medium text-white hover:bg-ocean-700 disabled:opacity-50"
+                >
+                  {working === -1 ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

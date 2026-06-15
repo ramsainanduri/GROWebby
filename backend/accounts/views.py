@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 
 from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.core.mail import send_mail
+from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
@@ -100,6 +102,26 @@ def register_view(request: HttpRequest) -> JsonResponse:
     user = User.objects.create_user(username=username, email=email, password=password, is_active=False)
     UserProfile.objects.create(user=user, purpose=purpose)
 
+    try:
+        send_mail(
+            subject="GROWebby Registration Pending",
+            message=f"Hello {username},\n\nYour registration has been received and is pending admin approval.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=True,
+        )
+        admin_emails = [u.email for u in User.objects.filter(is_superuser=True) if u.email]
+        if admin_emails:
+            send_mail(
+                subject="GROWebby: New User Registration",
+                message=f"A new user '{username}' ({email}) has registered.\n\nPurpose: {purpose}\n\nPlease log in to approve or deny.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=admin_emails,
+                fail_silently=True,
+            )
+    except Exception:
+        pass
+
     return JsonResponse(
         {"registered": True, "message": "Account created. Please wait for admin approval before logging in."},
         status=201,
@@ -156,6 +178,18 @@ def admin_approve_user(request: HttpRequest, user_id: int) -> JsonResponse:
 
     u.is_active = True
     u.save()
+
+    try:
+        send_mail(
+            subject="GROWebby Account Approved",
+            message=f"Hello {u.username},\n\nYour account has been approved. You can now log in.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[u.email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
     return JsonResponse({"id": u.id, "isActive": True})
 
 
@@ -173,3 +207,101 @@ def admin_deny_user(request: HttpRequest, user_id: int) -> JsonResponse:
 
     u.delete()
     return JsonResponse({"deleted": True})
+
+
+@require_POST
+def admin_create_user(request: HttpRequest) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    username = str(body.get("username", "")).strip()
+    email = str(body.get("email", "")).strip()
+    password = str(body.get("password", ""))
+    is_admin = bool(body.get("isAdmin", False))
+
+    if not username or not email or len(password) < 8:
+        return JsonResponse({"error": "Use a username, email, and password with at least 8 characters."}, status=400)
+
+    User = get_user_model()
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({"error": "That username is already taken."}, status=400)
+    if User.objects.filter(email=email).exists():
+        return JsonResponse({"error": "That email is already registered."}, status=400)
+
+    user = User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        is_active=True,
+        is_staff=is_admin,
+        is_superuser=is_admin,
+    )
+    UserProfile.objects.create(user=user, purpose="Created by admin")
+
+    return JsonResponse({"id": user.id, "created": True})
+
+
+@require_POST
+def admin_update_user(request: HttpRequest, user_id: int) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    User = get_user_model()
+    try:
+        u = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found."}, status=404)
+
+    email = str(body.get("email", "")).strip()
+    is_admin = body.get("isAdmin")
+
+    if email and email != u.email:
+        if User.objects.filter(email=email).exclude(pk=user_id).exists():
+            return JsonResponse({"error": "That email is already registered."}, status=400)
+        u.email = email
+
+    if is_admin is not None:
+        is_admin_bool = bool(is_admin)
+        u.is_staff = is_admin_bool
+        u.is_superuser = is_admin_bool
+
+    u.save()
+    return JsonResponse({"id": u.id, "updated": True})
+
+
+@require_POST
+def admin_reset_user_password(request: HttpRequest, user_id: int) -> JsonResponse:
+    err = _require_admin(request)
+    if err:
+        return err
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    password = str(body.get("password", ""))
+    if len(password) < 8:
+        return JsonResponse({"error": "Password must be at least 8 characters."}, status=400)
+
+    User = get_user_model()
+    try:
+        u = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found."}, status=404)
+
+    u.set_password(password)
+    u.save()
+    return JsonResponse({"id": u.id, "passwordReset": True})

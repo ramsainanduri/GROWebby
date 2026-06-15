@@ -269,3 +269,30 @@ export async function adminDenyUser(userId: number): Promise<{ deleted: boolean 
   const response = await apiFetch(`/auth/admin/users/${userId}/deny/`, { method: "POST" });
   return parseResponse(response);
 }
+
+export async function adminCreateUser(data: any): Promise<{ id: number; created: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/create/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return parseResponse(response);
+}
+
+export async function adminUpdateUser(userId: number, data: any): Promise<{ id: number; updated: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/update/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return parseResponse(response);
+}
+
+export async function adminResetUserPassword(userId: number, data: any): Promise<{ id: number; passwordReset: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/reset-password/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return parseResponse(response);
+}

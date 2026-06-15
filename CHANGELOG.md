@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0]
 
+### Added
+- Rebuilt Admin UI natively in the frontend for managing users without relying on the Django Admin panel.
+- In-app CRUD capabilities to create users, toggle admin privileges, and reset passwords.
+- Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
+- Email notifications triggered upon new registration, admin approval, and simulation completion (success/fail/cancel).
+
 ### Changed
 - Re-architected CUDA execution environment: downgraded base to CUDA 12.0.1 for broad host driver compatibility.
 - Professionalized application documentation and removed informal system logs.

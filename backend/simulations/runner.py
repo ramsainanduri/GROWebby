@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.core.mail import send_mail
 from django.db import close_old_connections
 from django.utils.text import slugify
 from django.utils import timezone
@@ -1078,6 +1079,17 @@ def run_simulation(job_id: int) -> None:
         job.process_pid = None
         job.save(update_fields=["status", "current_step", "process_pid", "finished_at", "updated_at"])
         append_log(job, "Simulation pipeline completed successfully.")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Completed",
+                    message=f"Your simulation '{job.name}' has finished successfully.\n\nLog in to download your results.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     except SimulationCancelled as exc:
         job.status = SimulationJob.Status.CANCELLED
         job.error = str(exc)
@@ -1086,6 +1098,17 @@ def run_simulation(job_id: int) -> None:
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "error", "current_step", "process_pid", "finished_at", "updated_at"])
         append_log(job, "Run cancelled. Active GROMACS process was terminated.")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Cancelled",
+                    message=f"Your simulation '{job.name}' has been cancelled.\n\nReason: {exc}",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     except Exception as exc:
         job.status = SimulationJob.Status.FAILED
         job.error = str(exc)
@@ -1093,5 +1116,16 @@ def run_simulation(job_id: int) -> None:
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "error", "process_pid", "finished_at", "updated_at"])
         append_log(job, f"Simulation failed: {exc}")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Failed",
+                    message=f"Your simulation '{job.name}' failed to complete.\n\nError: {exc}",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     finally:
         close_old_connections()
