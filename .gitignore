@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-# lib/ # Commented out because it ignores frontend/src/lib. Use .venv/ instead.
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
