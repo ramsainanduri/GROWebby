@@ -28,7 +28,7 @@ repos:
     rev: v3.1.0
     hooks:
       - id: prettier
-        types_or: [javascript, jsx, typescript, tsx, json, css]
+        types_or: [javascript, jsx, ts, tsx, json, css]
 
   - repo: local
     hooks:
@@ -36,5 +36,5 @@ repos:
         name: TypeScript Check
         entry: bash -c 'cd frontend && npx tsc --noEmit'
         language: system
-        types_or: [typescript, tsx]
+        types_or: [ts, tsx]
         pass_filenames: false
