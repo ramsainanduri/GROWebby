@@ -1,6 +1,6 @@
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Django](https://img.shields.io/badge/Django-6.0.6-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
-[![GROMACS](https://img.shields.io/badge/GROMACS-2025.4-0066CC?logoColor=white)](https://www.gromacs.org/)
+[![GROMACS](https://img.shields.io/badge/GROMACS-2026.2-0066CC?logoColor=white)](https://www.gromacs.org/)
 [![gmxapi](https://img.shields.io/badge/gmxapi-0.4.x-0066CC)](https://gmxapi.org/)
 [![React](https://img.shields.io/badge/React-19.2.7-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8.0.16-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -20,7 +20,7 @@
 
 > **A local, Dockerized web interface for running GROMACS molecular dynamics simulations from your browser.**
 
-GROWebby brings a professional web UI to your local GROMACS installation. Instead of writing shell scripts or chasing MDP files across your filesystem, you upload a coordinate file, click through the pipeline stages, launch the simulation, and watch live energy and temperature charts — all from a single browser tab. Each user gets a private, isolated workspace. Admins control who gets access.
+GROWebby brings a professional web UI to your local GROMACS installation. Instead of writing shell scripts or chasing MDP files across your filesystem, you upload a coordinate file, click through the pipeline stages, launch the simulation, and watch live energy and temperature charts from a single browser tab. Each user gets a private, isolated workspace. Admins control who gets access.
 
 ---
 
@@ -29,9 +29,9 @@ GROWebby brings a professional web UI to your local GROMACS installation. Instea
 GROMACS is the gold standard for biomolecular simulation, but setting up and running a full MD pipeline typically requires comfort with the Linux command line, MDP files, and careful management of intermediate outputs. GROWebby abstracts that away:
 
 - **Upload** a `.pdb`, `.gro`, `.cif`, or `.mol2` coordinate file from the Files tab.
-- **Configure** each stage of the pipeline through a guided, form-based UI — force fields, box geometry, solvation, ion concentrations, energy minimization steps, equilibration ensembles, and production runtime.
-- **Launch** from any stage (skip topology if you already have it, for example).
-- **Monitor** live: energy, temperature, and pressure are charted as the simulation runs. Log lines stream to the terminal viewer in real time.
+- **Configure** each stage of the pipeline through a guided, form-based UI: force fields, box geometry, solvation, ion concentrations, energy minimization, NVT, NPT, and production runtime.
+- **Launch** one step at a time or run the complete pipeline. Step runs check for the required previous output.
+- **Monitor** live: energy, temperature, and pressure are charted as the simulation runs. Clean run events stream to the log viewer in real time, with full GROMACS command logs stored as files.
 - **Review** results in the 3D MolStar viewer and download trajectory/topology/log files directly from the browser.
 
 Everything runs on your local machine inside Docker. Your data never leaves your hardware.
@@ -42,7 +42,7 @@ Everything runs on your local machine inside Docker. Your data never leaves your
 
 | Feature | Details |
 |---------|---------|
-| 🔬 Multi-stage MD pipeline | Topology → Box → Solvation → Ions → Minimize → Equilibrate → Production |
+| 🔬 Multi-stage MD pipeline | Topology -> Box -> Solvation -> Ions -> Minimize -> NVT -> NPT -> Production |
 | 🧬 3D structure viewer | Embedded MolStar viewer, dark/light mode aware |
 | 📊 Live simulation metrics | Real-time energy, temperature, and pressure charts |
 | 👥 Multi-user workspaces | Each user has isolated files, runs, and results |
@@ -51,6 +51,15 @@ Everything runs on your local machine inside Docker. Your data never leaves your
 | 🔗 URL routing | Every page has its own URL — refresh doesn't reset you |
 | 📱 Responsive layout | Collapsing sidebar, mobile navigation bar |
 | 🗂 Simulation history | Browse, inspect, and re-open previous runs |
+| ⏹️ Run cancellation | Active GROMACS child process PID is stored and can be terminated from the Results page |
+
+---
+
+## Storage and Database
+
+GROWebby currently uses Django's default SQLite database at `backend/db.sqlite3`. The database stores users, groups, uploaded-file records, simulation jobs, run status, current step, progress, metrics, clean event logs, artifact metadata, run grouping, workspace names, and the active GROMACS process PID while a command is running.
+
+Large files are stored on disk under `backend/media/`, not inside the database. This includes uploaded structures, generated MDP files, GROMACS outputs, trajectories, energy files, and full command logs.
 
 ---
 
@@ -63,7 +72,7 @@ Everything runs on your local machine inside Docker. Your data never leaves your
 ```bash
 git clone https://github.com/yourorg/growebby.git
 cd growebby
-./install.sh   # builds images, creates admin user
+./install.sh   # detects the execution engine and writes .env
 ./start.sh     # starts all services
 ```
 
@@ -82,14 +91,28 @@ Once running, open your browser:
 | **Frontend** | http://localhost:5173 |
 | **Backend API** | http://localhost:8000/api/ |
 
-The default admin account is created by `install.sh`:
+Create the first admin account after startup:
 
-| Field | Value |
-|-------|-------|
-| Username | `admin` |
-| Password | `Admin` |
+```bash
+docker compose exec backend python manage.py ensure_admin \
+  --username admin \
+  --email admin@example.com \
+  --password "change-this-password"
+```
 
-> ⚠️ Change the admin password immediately in any shared environment.
+The password must be at least 8 characters. Change admin credentials immediately in any shared environment.
+
+---
+
+## Documentation
+
+Full documentation is available in [`docs/`](docs/README.md):
+
+- [User Guide](docs/user-guide.md)
+- [Simulation Workflow Reference](docs/simulation-workflow.md)
+- [Administration and Access Control](docs/administration.md)
+- [Architecture](docs/architecture.md)
+- [Operations and Troubleshooting](docs/operations.md)
 
 ---
 
@@ -138,6 +161,9 @@ growebby/
 ## Development
 
 ```bash
+# Create local environment configuration once
+cp .env.example .env
+
 # Start all containers with live reload
 docker compose up
 
@@ -154,41 +180,68 @@ docker exec growebby-backend-1 python manage.py test
 docker exec growebby-frontend-1 npm run build
 ```
 
+## Environment Configuration
+
+GROWebby reads runtime configuration from `.env`. The repository includes `.env.example` with safe defaults for normal local runs.
+
+Important settings:
+
+- `DJANGO_DEBUG=0` is the normal setting. Use `DJANGO_DEBUG=1` only while developing the backend.
+- `GROWEBBY_SERVE_MEDIA=1` lets the local backend serve uploaded files and run artifacts even when debug mode is off.
+- `GROWEBBY_ENGINE=docker-backend-cpu` runs GROMACS 2026.2 inside Docker with CPU/OpenMP support.
+- `GROMACS_EXECUTION_MODE=backend-gmx-2026.2` is shown in health checks and run metadata.
+- `GROMACS_BINARY=/usr/local/gromacs/bin/gmx` is the backend container path.
+- `GROWEBBY_ALLOW_DEMO_RUNS=0` keeps runs on the real GROMACS path. Set it to `1` only for UI development without a GROMACS executable.
+
+`docker-compose.yml` uses these values through environment interpolation, so debug mode is controlled by `.env`, not hardcoded in Compose.
+
+## Logs and Live Plots
+
+The Results page shows clean run events in the log window. Full GROMACS command output is saved as per-run files under `logs/` and listed in Run Files. When a command fails, the UI shows a readable failure summary and the final error tail, while the complete verbose output remains available as a downloadable log artifact.
+
+Live plots update while `mdrun` is active. GROWebby first publishes lightweight live progress points, then replaces them with extracted GROMACS energy data from `.edr`/`.xvg` files as soon as GROMACS flushes readable energy frames.
+
 ---
 
 ## GPU Acceleration
 
-GROWebby ships **three** GROMACS engine profiles — pick the one that matches your hardware:
+GROWebby supports real GROMACS execution on CPU Docker engines and native GPU execution where the host can expose the GPU to GROMACS.
 
 | Profile | Command | Best for |
 |---------|---------|----------|
-| `cpu` | `docker compose --profile cpu up` | Any machine, no GPU required |
+| `docker-backend-cpu` | `./start.sh` | macOS Apple Silicon without native GROMACS, or any machine with Docker CPU execution |
+| `mac-opencl-native` | `./install.sh && ./start.sh` | Apple Silicon GPU through a native macOS GROMACS OpenCL build |
 | `cuda` | `docker compose --profile cuda up` | Linux + NVIDIA GPU |
-| `metal` | `docker compose --profile metal up` | macOS + Apple Silicon / AMD / Intel GPU |
 
 ```bash
-# CPU only — works everywhere, including macOS Apple Silicon
-docker compose --profile cpu up
+# CPU Docker backend — works everywhere, including macOS Apple Silicon
+./start.sh
 
-# NVIDIA CUDA GPU — Linux host with NVIDIA drivers + nvidia-container-toolkit
-docker compose --profile cuda up
-
-# Apple Metal / OpenCL GPU — macOS with Apple Silicon, AMD, or Intel GPU
-docker compose --profile metal up
+# Apple Silicon GPU — requires native macOS GROMACS with OpenCL support
+./install.sh
+./start.sh
 ```
+
+### Apple Silicon GPU
+
+Apple M-series GPUs are not CUDA devices. GROMACS uses the macOS OpenCL backend for Apple Silicon GPU acceleration. Docker Desktop runs Linux containers and does not expose the Apple GPU as a macOS OpenCL device, so GROWebby runs this profile with:
+
+- Frontend in Docker
+- Django backend directly on macOS
+- Native `gmx` from the host, usually `/opt/homebrew/bin/gmx`
+
+Run `gmx --version` and confirm:
+
+```text
+GPU support: OpenCL
+```
+
+If that line is not present, `./install.sh` selects the Docker CPU backend so runs still execute correctly.
 
 ### CUDA Engine (`nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04`)
 - **Base image:** Ubuntu 24.04 LTS + CUDA 13.0.0 + cuDNN
-- **GROMACS:** 2025.4 compiled from source with `-DGMX_GPU=CUDA` and OpenMP threading
-- Requires: NVIDIA driver ≥ 570, [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
-
-### Apple Metal Engine (`python:3.14-slim`)
-- **Backend:** GROMACS uses OpenCL as its GPU compute layer on macOS — Apple's Metal GPU is accessed through the system OpenCL runtime automatically
-- **GROMACS:** 2025.4 compiled from source with `-DGMX_GPU=OpenCL`
-- Works on: Apple Silicon (M1–M4), Intel Macs with AMD or Intel Iris GPUs
-- Requires: Docker Desktop for Mac with "Use Rosetta" disabled for ARM images
-
-> On Apple Silicon, `gmx --version` will report `GPU support: OpenCL`. This is expected — Metal is the underlying hardware accelerator, OpenCL is the software API GROMACS uses to reach it.
+- **GROMACS:** 2026.2 compiled from source with `-DGMX_GPU=CUDA` and OpenMP threading
+- Requires: NVIDIA driver >= 570, [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
 
 ---
 
