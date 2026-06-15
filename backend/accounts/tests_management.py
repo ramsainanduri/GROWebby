@@ -14,7 +14,7 @@ class AdminCommandTests(TestCase):
             "ensure_admin",
             username="admin",
             email="admin@example.com",
-            password="correct-horse",
+            password="SecureAdminPass123",
             stdout=output,
         )
 
@@ -25,19 +25,19 @@ class AdminCommandTests(TestCase):
 
     def test_ensure_admin_errors_when_user_exists(self):
         User = get_user_model()
-        User.objects.create_user(username="admin", email="admin@example.com", password="correct-horse")
+        User.objects.create_user(username="admin", email="admin@example.com", password="SecureAdminPass123")
 
         with self.assertRaises(CommandError):
             call_command(
                 "ensure_admin",
                 username="admin",
                 email="admin@example.com",
-                password="correct-horse",
+                password="SecureAdminPass123",
             )
 
     def test_promote_admin_promotes_existing_user(self):
         User = get_user_model()
-        User.objects.create_user(username="researcher", email="r@example.com", password="correct-horse")
+        User.objects.create_user(username="researcher", email="researcher@example.org", password="SecureUserPass123")
 
         call_command("promote_admin", "researcher", superuser=True)
 
