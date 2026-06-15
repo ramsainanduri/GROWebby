@@ -5,25 +5,19 @@ export function AboutView() {
   const [versionInfo, setVersionInfo] = useState<{ version: string; buildDate: string; tools: Record<string, string> } | null>(null);
 
   useEffect(() => {
-    fetch("/api/health/versions/")
-      .then(r => r.json())
-      .then(liveRes => {
-        setVersionInfo({
-          version: "1.0.0",
-          buildDate: new Date().toISOString().split('T')[0],
-          tools: {
-            ...__LIVE_FRONTEND_VERSIONS__,
-            ...liveRes.tools
-          }
-        });
-      })
-      .catch(() => {
-        setVersionInfo({
-          version: "1.0.0",
-          buildDate: new Date().toISOString().split('T')[0],
-          tools: __LIVE_FRONTEND_VERSIONS__
-        });
+    Promise.all([
+      fetch("/api/health/versions/").then(r => r.json()).catch(() => ({ tools: {} })),
+      fetch("/version.json").then(r => r.json()).catch(() => ({ version: "1.0.0" }))
+    ]).then(([liveRes, localRes]) => {
+      setVersionInfo({
+        version: localRes.version,
+        buildDate: new Date().toISOString().split('T')[0],
+        tools: {
+          ...__LIVE_FRONTEND_VERSIONS__,
+          ...liveRes.tools
+        }
       });
+    });
   }, []);
 
   const iconMap: Record<string, { icon: typeof FlaskConical; color: string; label: string }> = {
