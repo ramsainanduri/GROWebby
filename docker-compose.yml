@@ -1,9 +1,13 @@
 services:
+  # ── Backend ────────────────────────────────────────────────────────────────
+  # Default profile: CPU (no GPU). Override BASE_IMAGE for cuda/metal profiles.
   backend:
     image: ramsainanduri/growebby-backend:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
     build:
       context: ./backend
+      args:
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-ramsainanduri/growebby-base-backend-cpu:latest}
     environment:
       DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-local-gromacs-web-interface-key}"
       DJANGO_DEBUG: "${DJANGO_DEBUG:-0}"
@@ -23,6 +27,7 @@ services:
       - ./backend:/app
       - ./.app_state/media:/app/media
 
+  # ── Frontend ───────────────────────────────────────────────────────────────
   frontend:
     image: ramsainanduri/growebby-frontend:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
@@ -37,6 +42,7 @@ services:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
 
+  # ── GROMACS Engine: CUDA (nvidia GPU) ─────────────────────────────────────
   gromacs-cuda-engine:
     image: ramsainanduri/growebby-gromacs-cuda-engine:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
@@ -55,6 +61,7 @@ services:
     volumes:
       - ./.app_state/media:/work
 
+  # ── GROMACS Engine: CPU (no GPU) ───────────────────────────────────────────
   gromacs-cpu-engine:
     image: ramsainanduri/growebby-gromacs-cpu-engine:${GROWEBBY_VERSION:-latest}
     pull_policy: missing
@@ -65,6 +72,7 @@ services:
     volumes:
       - ./.app_state/media:/work
 
+  # ── GROMACS Engine: Metal / OpenCL (macOS GPU) ────────────────────────────
   gromacs-metal-engine:
     image: ramsainanduri/growebby-gromacs-metal-engine:${GROWEBBY_VERSION:-latest}
     pull_policy: missing

@@ -85,7 +85,53 @@ docker compose up --build -d
 docker compose up --build -d backend frontend
 ```
 
+### 2.4 Two-Tier Image Architecture
+
+GROWebby uses a two-tier Docker image strategy for fast deployments:
+
+| Layer | Contents | When to rebuild |
+|---|---|---|
+| **Base images** (Docker Hub) | OS + tools + compiled GROMACS + pip/npm deps | Only when `requirements.txt`, `package.json`, or GROMACS version changes |
+| **App images** (built locally) | Thin `FROM base + COPY code` | Every deployment — builds in seconds |
+
+**Base image names by profile:**
+
+| Profile | Base image |
+|---|---|
+| CPU (default) | `ramsainanduri/growebby-base-backend-cpu:latest` |
+| CUDA | `ramsainanduri/growebby-base-backend-cuda:latest` |
+| Metal/OpenCL | `ramsainanduri/growebby-base-backend-metal:latest` |
+| Frontend (all profiles) | `ramsainanduri/growebby-base-frontend:latest` |
+
+**Rebuild and push base images** (requires Docker Hub login, done rarely):
+```bash
+# All profiles
+./build-base-images.sh --all --push
+
+# Single profile
+./build-base-images.sh --cpu --push
+./build-base-images.sh --cuda --push
+./build-base-images.sh --metal --push
+./build-base-images.sh --frontend --push
+
+# With a specific version tag
+./build-base-images.sh --all --push --tag 1.2.0
+```
+
+**Select profile at deploy time** by setting `BACKEND_BASE_IMAGE` in `.env`:
+```bash
+# CPU (default — no GPU)
+BACKEND_BASE_IMAGE=ramsainanduri/growebby-base-backend-cpu:latest
+
+# NVIDIA CUDA GPU
+BACKEND_BASE_IMAGE=ramsainanduri/growebby-base-backend-cuda:latest
+
+# Apple Silicon / OpenCL GPU
+BACKEND_BASE_IMAGE=ramsainanduri/growebby-base-backend-metal:latest
+```
+
 ---
+
 
 ## 3. Operations & Diagnostics
 

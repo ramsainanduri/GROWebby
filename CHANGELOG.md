@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0]
+
+### Added
+- Two-tier Docker image architecture: tool-only base images (pushed to Docker Hub once) plus thin app-layer images (built locally in seconds on every deploy).
+- `docker/base-backend-cpu/Dockerfile` — Python 3.14 + GROMACS 2026.2 CPU + pip deps, no app code.
+- `docker/base-backend-cuda/Dockerfile` — CUDA 12.1.1 + GROMACS 2026.2 GPU + pip deps, no app code.
+- `docker/base-backend-metal/Dockerfile` — Python 3.14 + OpenCL + GROMACS 2026.2 OpenCL + pip deps, no app code.
+- `docker/base-frontend/Dockerfile` — Node 22 + baked-in `node_modules`, no app code.
+- `build-base-images.sh` — helper script to build and optionally push all base images with `--cpu`, `--cuda`, `--metal`, `--frontend`, `--all`, `--push`, and `--tag` flags.
+
+### Changed
+- `backend/Dockerfile` reduced to `FROM ${BASE_IMAGE} + COPY .` — no more GROMACS compilation on every code change.
+- `frontend/Dockerfile` reduced to `FROM growebby-base-frontend + COPY .`.
+- `docker-compose.yml` now accepts `BACKEND_BASE_IMAGE` build arg to select the correct profile-specific base at compose-up time.
+- `docs/operations.md` updated with full two-tier image documentation and `BACKEND_BASE_IMAGE` configuration reference.
+
 ## [1.1.0]
+
 
 ### Added
 - Designed and integrated a scalable SVG vector logo (isometric simulation box) across the application interface and as the native favicon.
