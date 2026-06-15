@@ -8,19 +8,23 @@ type Props = {
 };
 
 /**
- * Resolve a potentially-relative Django media URL to a full URL on the
- * backend origin (port 8000 in local dev).  MolStar fetches files directly
- * with XHR, so it needs an absolute URL — relative paths would resolve to the
- * Vite origin (5173) and 404.
+ * Resolve a potentially-relative Django media URL to an absolute URL.
+ *
+ * The Vite dev server proxies /media/* → localhost:8000/media/* via vite.config.ts.
+ * MolStar fetches files with XHR, so we must give it an absolute URL.
+ * We use window.location.origin (the Vite port, e.g. 5173) — NOT the Django
+ * port — so the request goes through the proxy and Django CORS/auth cookies work.
+ *
+ * In production, /media/ is typically served from the same origin, so
+ * window.location.origin also works there.
  */
 function resolveMediaUrl(url?: string): string | undefined {
   if (!url) return undefined;
+  // Already absolute — pass through unchanged (e.g. RCSB/PDBe demo structures).
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  // Relative path like /media/uploads/file.pdb — prefix with backend origin.
-  const backendOrigin =
-    import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ||
-    `${window.location.protocol}//${window.location.hostname}:8000`;
-  return `${backendOrigin}${url.startsWith("/") ? "" : "/"}${url}`;
+  // Relative path like /media/uploads/file.pdb — make it absolute using the
+  // current page origin so the Vite proxy (or production nginx) handles it.
+  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
 export function Viewer3D({ coordinateUrl, dark }: Props) {
