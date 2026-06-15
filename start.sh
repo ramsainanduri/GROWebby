@@ -79,10 +79,10 @@ else
   # and never falls back to a local build unnecessarily.
   if [[ -n "$ENGINE_SERVICE" ]]; then
     echo "Checking Docker Hub for pre-built engine image ($ENGINE_SERVICE)..."
-    if docker compose pull "$ENGINE_SERVICE" 2>/dev/null; then
+    if timeout 60 docker compose pull "$ENGINE_SERVICE" 2>/dev/null; then
       echo "Engine image pulled from Docker Hub."
     else
-      echo "Not found on Docker Hub — will build locally. This may take 15-30 minutes."
+      echo "Not found on Docker Hub or timed out — will build locally. This may take 15-30 minutes."
     fi
   fi
 
