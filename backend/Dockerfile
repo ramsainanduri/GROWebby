@@ -14,6 +14,7 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 COPY . .
+RUN pip install --no-cache-dir --break-system-packages tzdata
 
 EXPOSE 8000
-CMD ["bash", "-lc", "python3 manage.py migrate && python3 manage.py ensure_admin && python3 manage.py runserver 0.0.0.0:8000"]
+CMD ["bash", "-lc", "python3 manage.py migrate && python3 manage.py ensure_admin && python3 manage.py runserver 0.0.0.0:8000 --insecure"]
