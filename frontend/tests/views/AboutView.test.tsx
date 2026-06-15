@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { AboutView } from "./AboutView";
+import { AboutView } from "../../src/views/AboutView";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 describe("AboutView", () => {
