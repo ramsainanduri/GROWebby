@@ -99,6 +99,8 @@ cd GROWebby
 ./start.sh     # starts services based on the detected profile
 ```
 
+> **Note:** The `docker-compose.yml` is configured to attempt pulling pre-built Docker images (`ramsainanduri/growebby-*`) from Docker Hub to save you startup time. If the images aren't available, Docker will automatically fall back to building them locally from scratch.
+
 ### Windows
 
 ```bat
