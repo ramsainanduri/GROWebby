@@ -32,6 +32,7 @@ import {
   SessionState,
 } from "../lib/api";
 import { MetricCard } from "../components/ui";
+import { formatDuration } from "../lib/utils";
 
 export function AdminView({ session }: { session: SessionState }) {
   const [activeTab, setActiveTab] = useState<
@@ -568,6 +569,12 @@ export function AdminView({ session }: { session: SessionState }) {
                   <th className="px-5 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-300">
                     Status
                   </th>
+                  <th className="px-5 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-300">
+                    Step
+                  </th>
+                  <th className="px-5 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-300">
+                    Duration
+                  </th>
                   <th className="px-5 py-2.5 text-right font-semibold text-slate-600 dark:text-slate-300">
                     Actions
                   </th>
@@ -599,6 +606,18 @@ export function AdminView({ session }: { session: SessionState }) {
                       >
                         {sim.status}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400">
+                      {sim.currentStep || "-"}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {sim.startedAt
+                        ? formatDuration(
+                            (sim.finishedAt
+                              ? new Date(sim.finishedAt).getTime()
+                              : Date.now()) - new Date(sim.startedAt).getTime(),
+                          )
+                        : "-"}
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button

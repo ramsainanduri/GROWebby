@@ -13,6 +13,7 @@ import { ViewKey, StepKey } from "../types";
 import {
   downloadAllMetricsCsv,
   executionModeLabel,
+  formatDuration,
   formatRunTime,
   statusClass,
   stepName,
@@ -86,10 +87,11 @@ export function ResultsView({
     new Set(
       artifactFiles
         .filter((f) => f.name.endsWith(".tpr"))
-        .map((f) => f.name.replace(".tpr", ""))
-    )
+        .map((f) => f.name.replace(".tpr", "")),
+    ),
   );
-  if (analysisAvailableSteps.length === 0) analysisAvailableSteps.push("production");
+  if (analysisAvailableSteps.length === 0)
+    analysisAvailableSteps.push("production");
 
   const activeStepKey =
     (job.parameters.startStep as string | undefined) ??
@@ -201,7 +203,7 @@ export function ResultsView({
               <span className={statusClass(job.status)}>{job.status}</span>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-5">
             <StatusDatum label="Progress" value={`${job.progress}%`} />
             <StatusDatum label="Step" value={job.currentStep} />
             <StatusDatum
@@ -213,6 +215,18 @@ export function ResultsView({
             <StatusDatum
               label="Finished"
               value={job.finishedAt ? formatRunTime(job.finishedAt) : "Pending"}
+            />
+            <StatusDatum
+              label="Duration"
+              value={
+                job.startedAt
+                  ? formatDuration(
+                      (job.finishedAt
+                        ? new Date(job.finishedAt).getTime()
+                        : Date.now()) - new Date(job.startedAt).getTime(),
+                    )
+                  : "-"
+              }
             />
           </div>
           {canCancel && (
@@ -470,7 +484,10 @@ export function ResultsView({
                   label="Select Stage"
                   help="Choose which stage's output to analyze"
                   value={analysisStep}
-                  options={analysisAvailableSteps.map((s) => ({ value: s, label: s }))}
+                  options={analysisAvailableSteps.map((s) => ({
+                    value: s,
+                    label: s,
+                  }))}
                   onChange={setAnalysisStep}
                 />
                 <SelectField
@@ -499,7 +516,11 @@ export function ResultsView({
                   onClick={async () => {
                     setAnalysisBusy(true);
                     try {
-                      const res = await analyzeSimulation(job.id, analysisTool, analysisStep);
+                      const res = await analyzeSimulation(
+                        job.id,
+                        analysisTool,
+                        analysisStep,
+                      );
                       setAnalysisResults((prev) => [...prev, res]);
                       notify("success", `Analysis complete.`);
                     } catch (err) {

@@ -500,10 +500,19 @@ def run_mdrun_with_live_metrics(
     def stream_output() -> None:
         if not process.stdout:
             return
+        batch = []
+        last_flush = time.time()
         for line in process.stdout:
             stripped = line.rstrip()
             if stripped:
                 output_lines.append(stripped)
+                batch.append(stripped)
+            if batch and (time.time() - last_flush > 1.0 or len(batch) >= 20):
+                append_log(job, "\n".join(batch))
+                batch = []
+                last_flush = time.time()
+        if batch:
+            append_log(job, "\n".join(batch))
 
     thread = threading.Thread(target=stream_output, daemon=True)
     thread.start()
@@ -776,9 +785,9 @@ def step_commands(step_key: str, parameters: dict[str, Any], job: SimulationJob)
             "-nb",
             "gpu",
             "-bonded",
-            str(parameters.get("gpuBonded", "cpu")),
+            str(parameters.get("gpuBonded", "auto")),
             "-pme",
-            str(parameters.get("gpuPme", "cpu")),
+            str(parameters.get("gpuPme", "auto")),
         ]
 
     # mdrun performance flags
