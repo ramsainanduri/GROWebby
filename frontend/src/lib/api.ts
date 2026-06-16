@@ -281,11 +281,12 @@ export type AnalysisResult = {
 export async function analyzeSimulation(
   jobId: number,
   tool: string,
+  stepSource: string = "production",
 ): Promise<AnalysisResult> {
   const response = await apiFetch(`/simulations/${jobId}/analyze/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tool }),
+    body: JSON.stringify({ tool, step_source: stepSource }),
   });
   return parseResponse<AnalysisResult>(response);
 }

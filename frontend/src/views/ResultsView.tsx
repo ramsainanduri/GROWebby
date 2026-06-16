@@ -52,6 +52,7 @@ export function ResultsView({
   const [artifactText, setArtifactText] = useState("");
   const [artifactBusy, setArtifactBusy] = useState(false);
   const [analysisTool, setAnalysisTool] = useState("rmsd");
+  const [analysisStep, setAnalysisStep] = useState("production");
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
 
@@ -81,6 +82,15 @@ export function ResultsView({
     },
   ];
   const artifactFiles = job.artifactFiles ?? [];
+  const analysisAvailableSteps = Array.from(
+    new Set(
+      artifactFiles
+        .filter((f) => f.name.endsWith(".tpr"))
+        .map((f) => f.name.replace(".tpr", ""))
+    )
+  );
+  if (analysisAvailableSteps.length === 0) analysisAvailableSteps.push("production");
+
   const activeStepKey =
     (job.parameters.startStep as string | undefined) ??
     [...job.metrics].reverse().find((metric) => metric.stage)?.stage ??
@@ -457,8 +467,15 @@ export function ResultsView({
               </div>
               <div className="flex flex-col gap-3">
                 <SelectField
+                  label="Select Stage"
+                  help="Choose which stage's output to analyze"
+                  value={analysisStep}
+                  options={analysisAvailableSteps.map((s) => ({ value: s, label: s }))}
+                  onChange={setAnalysisStep}
+                />
+                <SelectField
                   label="Select Tool"
-                  help="Choose the tool to run on the production output"
+                  help="Choose the tool to run on the selected output"
                   value={analysisTool}
                   options={[
                     {
@@ -482,7 +499,7 @@ export function ResultsView({
                   onClick={async () => {
                     setAnalysisBusy(true);
                     try {
-                      const res = await analyzeSimulation(job.id, analysisTool);
+                      const res = await analyzeSimulation(job.id, analysisTool, analysisStep);
                       setAnalysisResults((prev) => [...prev, res]);
                       notify("success", `Analysis complete.`);
                     } catch (err) {

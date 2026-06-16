@@ -580,9 +580,11 @@ def analyze_simulation(request: HttpRequest, job_id: int) -> JsonResponse:
         if job.status != SimulationJob.Status.COMPLETED:
             return JsonResponse({"error": "Analysis can only be run on completed jobs."}, status=400)
 
+        step_source = body.get("step_source", "production")
+
         from .runner import run_analysis
 
-        result = run_analysis(job_id, tool_name)
+        result = run_analysis(job_id, tool_name, step_source)
         return JsonResponse(result)
     except SimulationJob.DoesNotExist:
         return JsonResponse({"error": "Job not found."}, status=404)
