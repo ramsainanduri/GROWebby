@@ -209,6 +209,7 @@ export function downloadChartSvg(
   filename: string,
   container: HTMLDivElement | null,
   bgColor: string = "transparent",
+  plotTitle?: string
 ) {
   const svg = container?.querySelector("svg");
   if (!svg) return;
@@ -217,6 +218,57 @@ export function downloadChartSvg(
   if (bgColor !== "transparent") {
     clone.style.backgroundColor = bgColor;
   }
+
+  if (plotTitle) {
+    const viewBox = clone.getAttribute("viewBox");
+    let width = 800;
+    let height = 400;
+    if (viewBox) {
+      const parts = viewBox.split(" ").map(Number);
+      if (parts.length === 4) {
+        width = parts[2];
+        height = parts[3];
+      }
+    } else {
+      width = Number(clone.getAttribute("width") || 800);
+      height = Number(clone.getAttribute("height") || 400);
+    }
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("transform", "translate(0, 30)");
+
+    while (clone.firstChild) {
+      g.appendChild(clone.firstChild);
+    }
+
+    const titleText = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text"
+    );
+    titleText.setAttribute("x", (width / 2).toString());
+    titleText.setAttribute("y", "20");
+    titleText.setAttribute("text-anchor", "middle");
+    titleText.setAttribute("font-family", "sans-serif");
+    titleText.setAttribute("font-size", "16");
+    titleText.setAttribute("font-weight", "600");
+    
+    const axisText = g.querySelector("text");
+    const textColor = axisText ? axisText.getAttribute("fill") || "#94a3b8" : "#94a3b8";
+    titleText.setAttribute("fill", textColor);
+    titleText.textContent = plotTitle;
+
+    clone.appendChild(titleText);
+    clone.appendChild(g);
+
+    clone.setAttribute("viewBox", `0 0 ${width} ${height + 30}`);
+    if (clone.hasAttribute("height")) {
+      const hStr = clone.getAttribute("height");
+      if (hStr && !hStr.includes("%")) {
+        clone.setAttribute("height", `${height + 30}`);
+      }
+    }
+  }
+
   const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
     type: "image/svg+xml;charset=utf-8",
   });

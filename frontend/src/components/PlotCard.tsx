@@ -300,6 +300,7 @@ export function PlotCard({
               `${jobName}-${series.key}-${stageFilter}.svg`,
               chartRef.current,
               exportBg,
+              title
             )
           }
         >

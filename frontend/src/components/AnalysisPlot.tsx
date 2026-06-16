@@ -237,6 +237,7 @@ export function AnalysisPlot({
               `${jobName}-${title}.svg`,
               chartRef.current,
               exportBg,
+              title
             )
           }
         >
