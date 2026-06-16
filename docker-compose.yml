@@ -31,7 +31,7 @@ services:
               count: all
               capabilities: ["gpu"]
     volumes:
-      - ./backend:/app
+    volumes:
       - ./.app_state/media:/app/media
 
   # ── Frontend ───────────────────────────────────────────────────────────────
@@ -45,9 +45,7 @@ services:
       VITE_BACKEND_PROXY_TARGET: "${VITE_BACKEND_PROXY_TARGET:-http://backend:8000}"
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - frontend-node-modules:/app/node_modules
+
 
   # ── GROMACS Engine: CUDA (nvidia GPU) ─────────────────────────────────────
   # Reuses growebby-base-backend-cuda which already has GROMACS compiled with CUDA.

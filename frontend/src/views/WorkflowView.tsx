@@ -12,6 +12,7 @@ import {
   Waves,
   FileUp,
   X,
+  HelpCircle
 } from "lucide-react";
 import { SimulationJob, UploadedCoordinate, GromacsOptions } from "../lib/api";
 import { defaults, StepKey, steps } from "../types";
@@ -668,10 +669,12 @@ export function WorkflowView({
             <label className="block min-w-0">
               <span className="mb-1 flex items-center gap-1.5 text-sm font-medium">
                 Run name
-                <InfoPopover
-                  title="Run name"
-                  body="Used in the run list and workspace folder. Renaming a run also renames its stored workspace folder."
-                />
+                <span 
+                  title="Used in the run list and workspace folder. Renaming a run also renames its stored workspace folder." 
+                  className="cursor-help text-slate-400 hover:text-ocean-600"
+                >
+                  <HelpCircle size={14} />
+                </span>
               </span>
               <input
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700 dark:bg-slate-800"
