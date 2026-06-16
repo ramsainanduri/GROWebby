@@ -150,12 +150,17 @@ export function AnalysisPlot({
       </div>
       <div
         ref={chartRef}
-        className="h-72 rounded-lg border border-slate-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-950"
+        className={`h-72 rounded-lg border border-slate-100 p-2 dark:border-slate-800 transition-colors ${
+          exportBg === "transparent" ? "bg-white dark:bg-slate-950" : ""
+        }`}
+        style={{
+          backgroundColor: exportBg === "transparent" ? undefined : exportBg,
+        }}
       >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
-            margin={{ top: 8, right: 20, bottom: 32, left: 28 }}
+            margin={{ top: 10, right: 20, bottom: 35, left: 55 }}
           >
             {showGrid && (
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -166,7 +171,7 @@ export function AnalysisPlot({
               label={{
                 value: xLabel,
                 position: "insideBottom",
-                offset: -22,
+                offset: -25,
                 fontSize: 12,
               }}
             />
@@ -177,7 +182,7 @@ export function AnalysisPlot({
                 value: yLabel,
                 angle: -90,
                 position: "insideLeft",
-                offset: -18,
+                offset: -45,
                 fontSize: 12,
               }}
             />
