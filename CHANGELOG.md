@@ -10,46 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0]
 
 ### Added
-- Integrated `@monaco-editor/react` for a full-screen PDB Text Editor inside the UI to let users manually fix crystal structures (e.g., stripping HOH lines).
-- Implemented comprehensive advanced UI parameter toggles (like `-missing`) directly passed to GROMACS command executions.
-- Two-tier Docker image architecture: tool-only base images (pushed to Docker Hub once) plus thin app-layer images (built locally in seconds on every deploy).
-- `docker/base-backend-cpu/Dockerfile` — Python 3.14 + GROMACS 2026.2 CPU + pip deps, no app code.
-- `docker/base-backend-cuda/Dockerfile` — CUDA 12.1.1 + GROMACS 2026.2 GPU + pip deps, no app code.
-- `docker/base-backend-metal/Dockerfile` — Python 3.14 + OpenCL + GROMACS 2026.2 OpenCL + pip deps, no app code.
-- `docker/base-frontend/Dockerfile` — Node 22 + baked-in `node_modules`, no app code.
-- `install_forcefields.sh` script to automatically download and install additional GROMACS force fields (`charmm36` variants, `amber03ws`, `amber14sb_OL15`) into the backend container during build.
-- Designed and integrated a scalable SVG vector logo (isometric simulation box) across the application interface and as the native favicon.
-- Added a new backend API endpoint `/api/gromacs-options/` to dynamically expose engine-supported parameters.
-- Rebuilt Admin UI natively in the frontend for managing users without relying on the Django Admin panel.
-- In-app CRUD capabilities to create users, toggle admin privileges, and reset passwords.
-- Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
-- Email notifications triggered upon new registration, admin approval, and simulation completion (success/fail/cancel).
+- **In-App PDB Editor**: Full-screen Monaco-powered editor to manually review and fix crystal structures prior to simulation.
+- **Advanced GROMACS Parameters**: Support for custom command-line toggles (e.g., `-missing`) and dynamic parameter exposure via backend APIs.
+- **Extended Force Fields**: Auto-installation of modern topologies including `charmm36`, `amber03ws`, and `amber14sb_OL15`.
+- **Native User Management**: Built-in Admin dashboard with CRUD operations, role assignments, and email notifications for approvals and workflow events.
+- **Enhanced Export Capabilities**: Dynamic SVG exports that correctly bind user-defined plot titles, styled backgrounds, and properly-centered axis labels.
+- **New Branding**: Isometric simulation box SVG logo natively integrated into the UI and favicon.
 
 ### Changed
-- Refactored the backend GROMACS simulation pipeline (`runner.py`) to a highly modular architecture in `backend/simulations/gmx/` to support extensive parameters per command.
-- Updated the frontend Dockerfile to `RUN npm install` over the base image, enabling seamless integration of new local NPM packages during build without a base-image push.
+- **Modular Pipeline**: Completely refactored the Python execution backend (`runner.py` to `simulations/gmx/*`) to handle robust, parameter-rich GROMACS commands.
+- **Dynamic Workflows**: Simulation options (force fields, water models) are now populated dynamically directly from the underlying engine context.
+- **Two-Tier Docker Architecture**: Decoupled environment tools (CUDA, OpenCL, Node) into pre-built base images, slashing local build and deployment times to mere seconds.
+- **Thorough Code Cleanup**: Removed redundant variables, fixed implicit typing errors in the frontend, and scrubbed development artifacts for a production-ready codebase.
 
 ### Fixed
-- Fixed missing `unzip` package in backend Dockerfile, which caused `install_forcefields.sh` to silently fail to download custom force fields.
-- Fixed `start.sh` so it properly utilizes `COMPOSE_PROFILES` from `.env` to start the CUDA engine and use the CUDA base image when configured.
-- Fixed python command issue in `start.sh` where `python manage.py shell` failed inside the Ubuntu container; now explicitly uses `python3`.
-- Fixed deployment script `start.sh` where `docker compose pull` could hang indefinitely; now uses a direct `docker pull` with a 60-second timeout.
-- Fixed backend container crashing immediately on Ubuntu base images by explicitly using `python3` instead of `python` in the Dockerfile `CMD`.
-- Cleaned up GROMACS parameter choices in the UI by removing entirely unsupported force fields (e.g., `AMOEBA`, `OPLS-AA_SEI`) and ensuring water models match the available topologies.
-
-### Changed
-- `backend/Dockerfile` reduced to `FROM ${BASE_IMAGE} + COPY .` — no more GROMACS compilation on every code change.
-- `frontend/Dockerfile` reduced to `FROM growebby-base-frontend + COPY .`.
-- `docker-compose.yml` now accepts `BACKEND_BASE_IMAGE` build arg to select the correct profile-specific base at compose-up time.
-- `docs/operations.md` updated with full two-tier image documentation and `BACKEND_BASE_IMAGE` configuration reference.
-- Re-architected CUDA execution environment: downgraded base to CUDA 12.0.1 for broad host driver compatibility.
-- GROMACS configuration menus in the Workflow UI are now dynamically populated from the backend engine instead of using hardcoded lists.
-- Updated documentation with clear guidelines for managing fine-grained group permissions via the standard Django Admin interface.
-- Professionalized application documentation and removed informal system logs.
-- Consolidated hardware engine profiling and error recovery for container environments.
-- Restored frontend utility and API abstractions after UI component decoupling.
-- Fixed Tailwind v4 initialization by removing deprecated PostCSS configuration.
-- Updated repository structure to ensure essential source directories are properly tracked.
+- Stabilized deployment scripts (`start.sh`) preventing UI browser crashes and addressing Docker compose timeouts on headless servers.
+- Corrected numerous backend container crashes caused by path resolution and python binary variations on Ubuntu base images.
+- Re-architected CUDA base images using 12.0.1 for significantly broader host GPU driver compatibility.
+- Fixed axis label overflows and chart cutoff issues in the Analysis and Workflow UI plots.
 
 ## [1.0.0]
 
