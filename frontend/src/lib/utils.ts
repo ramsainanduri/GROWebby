@@ -1,9 +1,14 @@
 import { SimulationJob, UploadedCoordinate } from "./api";
 import { defaults, StepKey, steps } from "../types";
 
-export function upsertRun(runs: SimulationJob[], next: SimulationJob): SimulationJob[] {
+export function upsertRun(
+  runs: SimulationJob[],
+  next: SimulationJob,
+): SimulationJob[] {
   const withoutNext = runs.filter((run) => run.id !== next.id);
-  return [next, ...withoutNext].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 50);
+  return [next, ...withoutNext]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, 50);
 }
 
 export function formatRunTime(value: string): string {
@@ -11,7 +16,7 @@ export function formatRunTime(value: string): string {
     month: "short",
     day: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   }).format(new Date(value));
 }
 
@@ -46,7 +51,13 @@ export type RunGroup = {
 };
 
 export function runStepKey(run: SimulationJob): StepKey {
-  const explicit = String(run.step || run.parameters.startStep || run.parameters.runUntil || run.currentStep || "");
+  const explicit = String(
+    run.step ||
+      run.parameters.startStep ||
+      run.parameters.runUntil ||
+      run.currentStep ||
+      "",
+  );
   return stepKeyFromName(explicit);
 }
 
@@ -57,12 +68,30 @@ export function groupRuns(runs: SimulationJob[]): RunGroup[] {
     byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), run]);
   }
 
-  const statusPriority: SimulationJob["status"][] = ["failed", "running", "queued", "cancelled", "completed"];
+  const statusPriority: SimulationJob["status"][] = [
+    "failed",
+    "running",
+    "queued",
+    "cancelled",
+    "completed",
+  ];
   return Array.from(byGroup.entries())
     .map(([id, groupedRuns]) => {
-      const stepsInOrder = [...groupedRuns].sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime());
-      const latest = [...groupedRuns].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0] ?? stepsInOrder[0];
-      const status = statusPriority.find((candidate) => groupedRuns.some((run) => run.status === candidate)) ?? latest.status;
+      const stepsInOrder = [...groupedRuns].sort(
+        (left, right) =>
+          new Date(left.createdAt).getTime() -
+          new Date(right.createdAt).getTime(),
+      );
+      const latest =
+        [...groupedRuns].sort(
+          (left, right) =>
+            new Date(right.updatedAt).getTime() -
+            new Date(left.updatedAt).getTime(),
+        )[0] ?? stepsInOrder[0];
+      const status =
+        statusPriority.find((candidate) =>
+          groupedRuns.some((run) => run.status === candidate),
+        ) ?? latest.status;
       const progress = Math.max(...groupedRuns.map((run) => run.progress ?? 0));
       return {
         id,
@@ -72,51 +101,90 @@ export function groupRuns(runs: SimulationJob[]): RunGroup[] {
         progress,
         createdAt: stepsInOrder[0]?.createdAt ?? latest.createdAt,
         latest,
-        steps: stepsInOrder
+        steps: stepsInOrder,
       };
     })
-    .sort((left, right) => new Date(right.latest.updatedAt).getTime() - new Date(left.latest.updatedAt).getTime());
+    .sort(
+      (left, right) =>
+        new Date(right.latest.updatedAt).getTime() -
+        new Date(left.latest.updatedAt).getTime(),
+    );
 }
 
 export function makeRunName(inputName = "simulation"): string {
   const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const base = inputName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "simulation";
+  const base =
+    inputName
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim() || "simulation";
   return `${base} ${stamp}`;
 }
 
-export function normalizeRunParameters(parameters: typeof defaults): typeof defaults {
+export function normalizeRunParameters(
+  parameters: typeof defaults,
+): typeof defaults {
   const runMode = parameters.runMode === "pipeline" ? "pipeline" : "step";
   const startStep = runMode === "pipeline" ? "topology" : parameters.startStep;
-  const runUntil = runMode === "pipeline" ? "production" : startStep;
+  const runUntil = runMode === "pipeline" ? "production_mdrun" : startStep;
   return {
     ...parameters,
     runName: parameters.runName.trim() || makeRunName(),
     runMode,
     startStep,
-    runUntil
+    runUntil,
   };
 }
 
-export function downloadCsv(filename: string, metrics: SimulationJob["metrics"], valueKey: string) {
-  const safeName = filename.replace(/[^\w.-]+/g, "_");
-  const rows = ["stage,progress,sample,timePs,value"];
-  rows.push(...metrics.map((metric) => `${metric.stage ?? ""},${metric.progress},${metric.sample ?? ""},${metric.timePs ?? ""},${metric[valueKey] ?? ""}`));
-  const blob = new Blob([`${rows.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+export function downloadCsv(filename: string, data: any[], valueKey: string) {
+  if (!data || data.length === 0) return;
+  const header = `Time (ps),${valueKey}\n`;
+  const rows = data.map((d) => `${d.x},${d.y}`);
+  const csvContent = "data:text/csv;charset=utf-8," + header + rows.join("\n");
+  const encodedUri = encodeURI(csvContent);
   const link = document.createElement("a");
-  link.href = url;
-  link.download = safeName;
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
 }
 
-export function downloadAllMetricsCsv(filename: string, metrics: SimulationJob["metrics"]) {
+export function downloadAllMetricsCsv(
+  filename: string,
+  metrics: SimulationJob["metrics"],
+) {
   const safeName = filename.replace(/[^\w.-]+/g, "_");
-  const preferred = ["stage", "progress", "sample", "timePs", "energy", "potential", "totalEnergy", "kineticEnergy", "temperature", "pressure", "density"];
-  const columns = [...preferred.filter((key) => metrics.some((metric) => metric[key] !== undefined)), ...Array.from(new Set(metrics.flatMap((metric) => Object.keys(metric)))).filter((key) => !preferred.includes(key)).sort()];
+  const preferred = [
+    "stage",
+    "progress",
+    "sample",
+    "timePs",
+    "energy",
+    "potential",
+    "totalEnergy",
+    "kineticEnergy",
+    "temperature",
+    "pressure",
+    "density",
+  ];
+  const columns = [
+    ...preferred.filter((key) =>
+      metrics.some((metric) => metric[key] !== undefined),
+    ),
+    ...Array.from(new Set(metrics.flatMap((metric) => Object.keys(metric))))
+      .filter((key) => !preferred.includes(key))
+      .sort(),
+  ];
   const rows = [columns.join(",")];
-  rows.push(...metrics.map((metric) => columns.map((column) => metric[column] ?? "").join(",")));
-  const blob = new Blob([`${rows.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
+  rows.push(
+    ...metrics.map((metric) =>
+      columns.map((column) => metric[column] ?? "").join(","),
+    ),
+  );
+  const blob = new Blob([`${rows.join("\n")}\n`], {
+    type: "text/csv;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -125,12 +193,17 @@ export function downloadAllMetricsCsv(filename: string, metrics: SimulationJob["
   URL.revokeObjectURL(url);
 }
 
-export function downloadChartSvg(filename: string, container: HTMLDivElement | null) {
+export function downloadChartSvg(
+  filename: string,
+  container: HTMLDivElement | null,
+) {
   const svg = container?.querySelector("svg");
   if (!svg) return;
   const clone = svg.cloneNode(true) as SVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml;charset=utf-8" });
+  const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
+    type: "image/svg+xml;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -142,11 +215,11 @@ export function downloadChartSvg(filename: string, container: HTMLDivElement | n
 export function suggestedResumeStep(job: SimulationJob | null): StepKey | null {
   if (!job || job.status === "completed") return null;
   if (job.status === "failed") return stepKeyFromName(job.currentStep);
-  if (job.progress >= 82) return "production";
-  if (job.progress >= 76) return "npt";
-  if (job.progress >= 66) return "nvt";
-  if (job.progress >= 50) return "minimize";
-  if (job.progress >= 38) return "ions";
+  if (job.progress >= 82) return "production_grompp";
+  if (job.progress >= 76) return "npt_grompp";
+  if (job.progress >= 66) return "nvt_grompp";
+  if (job.progress >= 50) return "minimize_grompp";
+  if (job.progress >= 38) return "ions_grompp";
   if (job.progress >= 24) return "solvation";
   if (job.progress >= 12) return "box";
   return "topology";
@@ -154,43 +227,134 @@ export function suggestedResumeStep(job: SimulationJob | null): StepKey | null {
 
 function stepKeyFromName(name: string): StepKey {
   const normalized = name.toLowerCase();
-  if (normalized.includes("production")) return "production";
-  if (normalized.includes("npt")) return "npt";
-  if (normalized.includes("nvt") || normalized.includes("equil")) return "nvt";
-  if (normalized.includes("minim")) return "minimize";
-  if (normalized.includes("ion")) return "ions";
+  if (normalized.includes("production"))
+    return normalized.includes("mdrun")
+      ? "production_mdrun"
+      : "production_grompp";
+  if (normalized.includes("npt"))
+    return normalized.includes("mdrun") ? "npt_mdrun" : "npt_grompp";
+  if (normalized.includes("nvt") || normalized.includes("equil"))
+    return normalized.includes("mdrun") ? "nvt_mdrun" : "nvt_grompp";
+  if (normalized.includes("minim"))
+    return normalized.includes("mdrun") ? "minimize_mdrun" : "minimize_grompp";
+  if (normalized.includes("ion"))
+    return normalized.includes("genion") ? "ions_genion" : "ions_grompp";
   if (normalized.includes("solv")) return "solvation";
   if (normalized.includes("box")) return "box";
   return "topology";
 }
 
-export function buildConfigPreview(parameters: typeof defaults, upload: UploadedCoordinate | null, gpuAvailable = false): string {
+function mergeArgs(defaultArgs: string[], customArgsStr?: string): string {
+  const defaultStr = defaultArgs.join(" ");
+  if (!customArgsStr) return defaultStr;
+
+  const defaultTokens =
+    defaultStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  const customTokens =
+    customArgsStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+
+  const customFlags = new Set(
+    customTokens.filter((t) => t.startsWith("-")).map((t) => t.split("=")[0]),
+  );
+
+  const filteredDefaults = [];
+  for (let i = 0; i < defaultTokens.length; i++) {
+    const token = defaultTokens[i];
+    if (token.startsWith("-")) {
+      const flag = token.split("=")[0];
+      if (customFlags.has(flag)) {
+        if (
+          i + 1 < defaultTokens.length &&
+          !defaultTokens[i + 1].startsWith("-")
+        ) {
+          i++;
+        }
+        continue;
+      }
+    }
+    filteredDefaults.push(token);
+  }
+
+  return [...filteredDefaults, ...customTokens].join(" ");
+}
+
+export function buildConfigPreview(
+  parameters: typeof defaults,
+  upload: UploadedCoordinate | null,
+  gpuAvailable = false,
+): string {
   const input = upload?.originalName ?? "<select-or-upload-coordinate-file>";
   const useGpu = parameters.useGpu && gpuAvailable;
-  const prefix = [
+
+  const pdb2gmxArgs = [];
+  if (parameters.forceField) pdb2gmxArgs.push(`-ff ${parameters.forceField}`);
+  if (parameters.waterModel)
+    pdb2gmxArgs.push(`-water ${parameters.waterModel}`);
+  if (parameters.ignoreHydrogens) pdb2gmxArgs.push("-ignh");
+  if (parameters.missingAtoms) pdb2gmxArgs.push("-missing");
+  if (parameters.termini !== "interactive") pdb2gmxArgs.push("-ter");
+  const pdb2gmxStr = mergeArgs(pdb2gmxArgs, parameters.customArgs?.pdb2gmx);
+
+  const editconfArgs = [];
+  if (parameters.boxType) editconfArgs.push(`-bt ${parameters.boxType}`);
+  if (parameters.distanceNm) editconfArgs.push(`-d ${parameters.distanceNm}`);
+  if (parameters.centerMolecule) editconfArgs.push("-c");
+  const editconfStr = mergeArgs(editconfArgs, parameters.customArgs?.editconf);
+
+  const solvateArgs = [];
+  if (parameters.solventStructure)
+    solvateArgs.push(`-cs ${parameters.solventStructure}`);
+  if (parameters.solventScale)
+    solvateArgs.push(`-scale ${parameters.solventScale}`);
+  if (parameters.maxSolventMolecules > 0)
+    solvateArgs.push(`-maxsol ${parameters.maxSolventMolecules}`);
+  const solvateStr = mergeArgs(solvateArgs, parameters.customArgs?.solvate);
+
+  const genionArgs = [];
+  if (parameters.positiveIon)
+    genionArgs.push(`-pname ${parameters.positiveIon}`);
+  if (parameters.negativeIon)
+    genionArgs.push(`-nname ${parameters.negativeIon}`);
+  if (parameters.neutralize) genionArgs.push("-neutral");
+  if (parameters.saltMolar) genionArgs.push(`-conc ${parameters.saltMolar}`);
+  const genionStr = mergeArgs(genionArgs, parameters.customArgs?.genion);
+
+  const gromppStr = mergeArgs([], parameters.customArgs?.grompp);
+
+  const mdrunArgs = [];
+  if (useGpu) mdrunArgs.push("-nb gpu");
+  const mdrunStr = mergeArgs(mdrunArgs, parameters.customArgs?.mdrun);
+
+  const lines = [
     "# GROWebby GROMACS workflow preview",
     `# run_name = ${parameters.runName || "<unnamed-run>"}`,
     `# run_mode = ${parameters.runMode}`,
     `# input = ${input}`,
     `# start_step = ${parameters.startStep}`,
     `# run_until = ${parameters.runUntil}`,
-    `# gpu_acceleration = ${useGpu ? "enabled" : parameters.useGpu ? "requested but unavailable in current engine" : "disabled"}`,
+    `# gpu_acceleration = ${
+      useGpu
+        ? "enabled"
+        : parameters.useGpu
+          ? "requested but unavailable in current engine"
+          : "disabled"
+    }`,
     "",
     "[commands]",
-    `gmx pdb2gmx -f ${input} -o processed.gro -p topol.top -ff ${parameters.forceField} -water ${parameters.waterModel}${parameters.ignoreHydrogens ? " -ignh" : ""}${parameters.termini === "interactive" ? "" : ` -ter`}`,
-    `gmx editconf -f processed.gro -o boxed.gro -bt ${parameters.boxType} -d ${parameters.distanceNm}${parameters.centerMolecule ? " -c" : ""}`,
-    `gmx solvate -cp boxed.gro -cs ${parameters.solventStructure} -o solvated.gro -p topol.top -scale ${parameters.solventScale}${parameters.maxSolventMolecules > 0 ? ` -maxsol ${parameters.maxSolventMolecules}` : ""}`,
-    "gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr",
-    `gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname ${parameters.positiveIon} -nname ${parameters.negativeIon}${parameters.neutralize ? " -neutral" : ""} -conc ${parameters.saltMolar}`,
-    "gmx grompp -f minim.mdp -c ionized.gro -p topol.top -o minim.tpr",
-    `gmx mdrun -deffnm minim${useGpu ? " -nb gpu" : ""}`,
-    "gmx grompp -f nvt.mdp -c minim.gro -r minim.gro -p topol.top -o nvt.tpr",
-    `gmx mdrun -deffnm nvt${useGpu ? " -nb gpu" : ""}`,
-    "gmx grompp -f npt.mdp -c nvt.gro -r nvt.gro -t nvt.cpt -p topol.top -o npt.tpr",
-    `gmx mdrun -deffnm npt${useGpu ? " -nb gpu" : ""}`,
+    `gmx pdb2gmx -f ${input} -o outputs/processed.gro -p topol.top -i posre.itp ${pdb2gmxStr}`.trim(),
+    `gmx editconf -f outputs/processed.gro -o outputs/boxed.gro ${editconfStr}`.trim(),
+    `gmx solvate -cp outputs/boxed.gro -o outputs/solvated.gro -p topol.top ${solvateStr}`.trim(),
+    `gmx grompp -f ions.mdp -c outputs/solvated.gro -p topol.top -o ions.tpr ${gromppStr}`.trim(),
+    `gmx genion -s ions.tpr -o outputs/ionized.gro -p topol.top ${genionStr}`.trim(),
+    `gmx grompp -f minim.mdp -c outputs/ionized.gro -p topol.top -o minim.tpr ${gromppStr}`.trim(),
+    `gmx mdrun -deffnm minim ${mdrunStr}`.trim(),
+    `gmx grompp -f nvt.mdp -c minim.gro -r minim.gro -p topol.top -o nvt.tpr ${gromppStr}`.trim(),
+    `gmx mdrun -deffnm nvt ${mdrunStr}`.trim(),
+    `gmx grompp -f npt.mdp -c nvt.gro -r nvt.gro -t nvt.cpt -p topol.top -o npt.tpr ${gromppStr}`.trim(),
+    `gmx mdrun -deffnm npt ${mdrunStr}`.trim(),
     "gmx energy -f npt.edr -o density.xvg  # select Density",
-    "gmx grompp -f production.mdp -c npt.gro -t npt.cpt -p topol.top -o production.tpr",
-    `gmx mdrun -deffnm production${useGpu ? " -nb gpu" : ""}`,
+    `gmx grompp -f production.mdp -c npt.gro -t npt.cpt -p topol.top -o production.tpr ${gromppStr}`.trim(),
+    `gmx mdrun -deffnm production ${mdrunStr}`.trim(),
     "",
     "[minim.mdp]",
     `integrator              = ${parameters.minimizer}`,
@@ -229,11 +393,22 @@ export function buildConfigPreview(parameters: typeof defaults, upload: Uploaded
     "",
     "[production.mdp]",
     "integrator              = md",
-    `nsteps                  = ${Math.round((parameters.productionNs * 1000) / parameters.dt)}`,
+    `nsteps                  = ${Math.round(
+      (parameters.productionNs * 1000) / parameters.dt,
+    )}`,
     `dt                      = ${parameters.dt}`,
-    `nstxout-compressed      = ${Math.max(1, Math.round(parameters.outputEveryPs / parameters.dt))}`,
-    `nstenergy               = ${Math.max(1, Math.round(parameters.outputEveryPs / parameters.dt))}`,
-    `nstlog                  = ${Math.max(1, Math.round(parameters.outputEveryPs / parameters.dt))}`,
+    `nstxout-compressed      = ${Math.max(
+      1,
+      Math.round(parameters.outputEveryPs / parameters.dt),
+    )}`,
+    `nstenergy               = ${Math.max(
+      1,
+      Math.round(parameters.outputEveryPs / parameters.dt),
+    )}`,
+    `nstlog                  = ${Math.max(
+      1,
+      Math.round(parameters.outputEveryPs / parameters.dt),
+    )}`,
     `tcoupl                  = ${parameters.thermostat}`,
     "tc-grps                 = System",
     "tau_t                   = 0.1",
@@ -243,15 +418,17 @@ export function buildConfigPreview(parameters: typeof defaults, upload: Uploaded
     "tau_p                   = 2.0",
     `ref_p                   = ${parameters.pressure}`,
     "compressibility         = 4.5e-5",
-    `constraints             = ${parameters.constraints}`
+    `constraints             = ${parameters.constraints}`,
   ];
-  return prefix.join("\n");
+  return lines.join("\n");
 }
-
 export function statusClass(status: SimulationJob["status"]): string {
   const base = "rounded-full px-2 py-0.5 text-xs font-semibold";
-  if (status === "completed") return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200`;
-  if (status === "failed") return `${base} bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200`;
-  if (status === "running") return `${base} bg-ocean-100 text-ocean-700 dark:bg-ocean-950 dark:text-ocean-200`;
+  if (status === "completed")
+    return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200`;
+  if (status === "failed")
+    return `${base} bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200`;
+  if (status === "running")
+    return `${base} bg-ocean-100 text-ocean-700 dark:bg-ocean-950 dark:text-ocean-200`;
   return `${base} bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200`;
 }

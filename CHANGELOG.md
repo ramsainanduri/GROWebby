@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0]
 
 ### Added
+- Integrated `@monaco-editor/react` for a full-screen PDB Text Editor inside the UI to let users manually fix crystal structures (e.g., stripping HOH lines).
+- Implemented comprehensive advanced UI parameter toggles (like `-missing`) directly passed to GROMACS command executions.
 - Two-tier Docker image architecture: tool-only base images (pushed to Docker Hub once) plus thin app-layer images (built locally in seconds on every deploy).
 - `docker/base-backend-cpu/Dockerfile` — Python 3.14 + GROMACS 2026.2 CPU + pip deps, no app code.
 - `docker/base-backend-cuda/Dockerfile` — CUDA 12.1.1 + GROMACS 2026.2 GPU + pip deps, no app code.
@@ -23,7 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-assignment of new users to `admin` or `user` Django groups based on status via signals.
 - Email notifications triggered upon new registration, admin approval, and simulation completion (success/fail/cancel).
 
+### Changed
+- Refactored the backend GROMACS simulation pipeline (`runner.py`) to a highly modular architecture in `backend/simulations/gmx/` to support extensive parameters per command.
+- Updated the frontend Dockerfile to `RUN npm install` over the base image, enabling seamless integration of new local NPM packages during build without a base-image push.
+
 ### Fixed
+- Fixed missing `unzip` package in backend Dockerfile, which caused `install_forcefields.sh` to silently fail to download custom force fields.
+- Fixed `start.sh` so it properly utilizes `COMPOSE_PROFILES` from `.env` to start the CUDA engine and use the CUDA base image when configured.
+- Fixed python command issue in `start.sh` where `python manage.py shell` failed inside the Ubuntu container; now explicitly uses `python3`.
 - Fixed deployment script `start.sh` where `docker compose pull` could hang indefinitely; now uses a direct `docker pull` with a 60-second timeout.
 - Fixed backend container crashing immediately on Ubuntu base images by explicitly using `python3` instead of `python` in the Dockerfile `CMD`.
 - Cleaned up GROMACS parameter choices in the UI by removing entirely unsupported force fields (e.g., `AMOEBA`, `OPLS-AA_SEI`) and ensuring water models match the available topologies.
@@ -87,4 +96,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Documentation
 - `README.md` with quick start, badges, and architecture overview
 - `CHANGELOG.md` (this file)
-

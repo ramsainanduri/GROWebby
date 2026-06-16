@@ -71,21 +71,21 @@ else
   if [[ -n "${BACKEND_BASE_IMAGE:-}" ]]; then
     echo "Pulling base image from Docker Hub: $BACKEND_BASE_IMAGE ..."
     if timeout 120 docker pull "$BACKEND_BASE_IMAGE" 2>/dev/null; then
-      echo "  ✅ Base image ready."
+      echo "Base image ready."
     else
-      echo "  ℹ️  Pull failed or timed out — will build locally if needed."
+      echo "Pull failed or timed out — will build locally if needed."
     fi
   fi
 
   # Build thin app layers (backend + frontend) from base images, then start everything.
-  docker compose up --build backend frontend -d
-  docker compose up -d
+  docker compose --profile "${COMPOSE_PROFILES:-cpu}" up --build backend frontend -d
+  docker compose --profile "${COMPOSE_PROFILES:-cpu}" up -d
 fi
 
 echo "Waiting for backend to initialize..."
 sleep 5
 if [[ "${GROWEBBY_ENGINE:-}" != "mac-opencl-native" ]]; then
-  docker compose exec backend python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@growebby.local', 'admin') if not User.objects.filter(username='admin').exists() else None" || true
+  docker compose exec backend python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@growebby.local', 'admin') if not User.objects.filter(username='admin').exists() else None" || true
 fi
 
 URL="http://localhost:5173"

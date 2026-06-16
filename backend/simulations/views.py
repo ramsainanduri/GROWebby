@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import shutil
+import signal
 import time
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -15,7 +15,7 @@ from django.http import HttpRequest, JsonResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .models import SimulationJob, SimulationLog, UploadedCoordinate
 from .runner import completed_step_available, enqueue_simulation, previous_step_key, user_dir_for_job
@@ -182,8 +182,16 @@ def simulations(request: HttpRequest) -> JsonResponse:
     if run_until == "equilibrate":
         run_until = "npt"
     previous_step = previous_step_key(start_step)
-    prerequisite_owner = None if (request.user.is_authenticated and request.user.is_staff) else (request.user if request.user.is_authenticated else None)
-    if previous_step and start_step == run_until and not completed_step_available(upload, previous_step, prerequisite_owner):
+    prerequisite_owner = (
+        None
+        if (request.user.is_authenticated and request.user.is_staff)
+        else (request.user if request.user.is_authenticated else None)
+    )
+    if (
+        previous_step
+        and start_step == run_until
+        and not completed_step_available(upload, previous_step, prerequisite_owner)
+    ):
         return JsonResponse(
             {
                 "error": f"Cannot run {start_step.upper()} yet. Complete the previous step first: {previous_step.upper()} output is required."
@@ -197,7 +205,12 @@ def simulations(request: HttpRequest) -> JsonResponse:
             run_group_job = visible_jobs(request).get(pk=int(raw_run_group_id))
         except (TypeError, ValueError, SimulationJob.DoesNotExist):
             return JsonResponse({"error": "The requested run group is not available."}, status=400)
-    run_name = str(body.get("name") or parameters.get("runName") or (run_group_job.name if run_group_job else "") or default_run_name()).strip()[:160]
+    run_name = str(
+        body.get("name")
+        or parameters.get("runName")
+        or (run_group_job.name if run_group_job else "")
+        or default_run_name()
+    ).strip()[:160]
     job = SimulationJob.objects.create(
         upload=upload,
         owner=request.user if request.user.is_authenticated else upload.owner,
@@ -221,10 +234,9 @@ def simulations(request: HttpRequest) -> JsonResponse:
 def admin_all_simulations(request: HttpRequest) -> JsonResponse:
     if not request.user.is_authenticated or not (request.user.is_staff or request.user.is_superuser):
         return JsonResponse({"error": "Admin access required."}, status=403)
-        
+
     latest = SimulationJob.objects.select_related("upload", "owner", "group").order_by("-created_at")[:200]
     return JsonResponse({"results": [job_payload(job) for job in latest]})
-
 
 
 @csrf_exempt
@@ -243,9 +255,18 @@ def simulation_detail(_request: HttpRequest, job_id: int) -> JsonResponse:
         if not new_name:
             return JsonResponse({"error": "Run name is required."}, status=400)
         group_id = job_run_group_id(job)
-        group_jobs = [candidate for candidate in visible_jobs(_request).select_related("upload") if job_run_group_id(candidate) == group_id]
+        group_jobs = [
+            candidate
+            for candidate in visible_jobs(_request).select_related("upload")
+            if job_run_group_id(candidate) == group_id
+        ]
         old_slugs = {candidate.workspace_slug for candidate in group_jobs if candidate.workspace_slug}
-        old_workspace = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / (job.workspace_slug or workspace_slug(group_id, job.name))
+        old_workspace = (
+            settings.MEDIA_ROOT
+            / "workspaces"
+            / user_dir_for_job(job)
+            / (job.workspace_slug or workspace_slug(group_id, job.name))
+        )
         new_slug = workspace_slug(group_id, new_name)
         new_workspace = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(job) / new_slug
         if old_workspace.exists() and old_workspace != new_workspace:
@@ -277,7 +298,9 @@ def simulation_detail(_request: HttpRequest, job_id: int) -> JsonResponse:
             candidate.delete()
         for slug in workspaces:
             for candidate_job in group_jobs:
-                shutil.rmtree(settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(candidate_job) / slug, ignore_errors=True)
+                shutil.rmtree(
+                    settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(candidate_job) / slug, ignore_errors=True
+                )
                 break  # all jobs in group share same owner; one removal is enough
         return JsonResponse({"deleted": True, "runGroupId": group_id, "deletedJobs": len(group_jobs)})
     return JsonResponse(job_payload(job))
@@ -421,10 +444,14 @@ def simulation_logs(_request: HttpRequest, job_id: int) -> StreamingHttpResponse
             try:
                 job = visible_jobs(_request).get(pk=job_id)
             except SimulationJob.DoesNotExist:
-                yield "event: error\ndata: {\"error\":\"Simulation not found\"}\n\n"
+                yield 'event: error\ndata: {"error":"Simulation not found"}\n\n'
                 break
 
-            if job.status in {SimulationJob.Status.COMPLETED, SimulationJob.Status.FAILED, SimulationJob.Status.CANCELLED}:
+            if job.status in {
+                SimulationJob.Status.COMPLETED,
+                SimulationJob.Status.FAILED,
+                SimulationJob.Status.CANCELLED,
+            }:
                 yield f"event: done\ndata: {json.dumps({'status': job.status})}\n\n"
                 break
 
@@ -469,72 +496,110 @@ def gromacs_options(_request: HttpRequest) -> JsonResponse:
     so the frontend can build fully-populated parameter forms without hardcoding values.
     """
     from .runner import FORCE_FIELDS, WATER_MODELS
-    return JsonResponse({
-        "forceFields": [
-            {"value": ff, "label": label, "category": category}
-            for ff, label, category in FORCE_FIELDS
-        ],
-        "waterModels": [
-            {"value": wm, "label": label, "category": category}
-            for wm, label, category in WATER_MODELS
-        ],
-        "boxTypes": [
-            {"value": "dodecahedron",  "label": "Rhombic dodecahedron (recommended for globular proteins)"},
-            {"value": "cubic",         "label": "Cubic"},
-            {"value": "octahedron",    "label": "Truncated octahedron"},
-            {"value": "triclinic",     "label": "Triclinic (custom)"},
-        ],
-        "minimizers": [
-            {"value": "steep",   "label": "Steepest descent (robust, default)"},
-            {"value": "cg",      "label": "Conjugate gradient (slower, more accurate)"},
-            {"value": "l-bfgs",  "label": "L-BFGS quasi-Newton (fastest near minimum)"},
-        ],
-        "thermostats": [
-            {"value": "V-rescale",   "label": "V-rescale (recommended)"},
-            {"value": "Nose-Hoover", "label": "Nosé-Hoover (rigorous canonical ensemble)"},
-            {"value": "Berendsen",   "label": "Berendsen (fast, not rigorous)"},
-            {"value": "Andersen",    "label": "Andersen (stochastic)"},
-            {"value": "no",          "label": "None"},
-        ],
-        "barostats": [
-            {"value": "Parrinello-Rahman", "label": "Parrinello-Rahman (production quality)"},
-            {"value": "C-rescale",         "label": "C-rescale (stochastic, good for equilibration)"},
-            {"value": "Berendsen",         "label": "Berendsen (fast relaxation, equilibration only)"},
-            {"value": "MTTK",              "label": "MTTK (Martyna-Tobias-Klein, rigorous)"},
-            {"value": "no",                "label": "None (NVT)"},
-        ],
-        "constraints": [
-            {"value": "none",       "label": "None"},
-            {"value": "h-bonds",    "label": "H-bonds (recommended for 2 fs)"},
-            {"value": "all-bonds",  "label": "All bonds"},
-            {"value": "h-angles",   "label": "H-bond angles"},
-            {"value": "all-angles", "label": "All angles"},
-        ],
-        "integrators": [
-            {"value": "md",    "label": "md — Leap-frog (default, fastest)"},
-            {"value": "md-vv", "label": "md-vv — Velocity Verlet (energy-conserving)"},
-            {"value": "sd",    "label": "sd — Stochastic dynamics / Langevin"},
-            {"value": "bd",    "label": "bd — Brownian dynamics (coarse-grained)"},
-        ],
-        "coulombTypes": [
-            {"value": "PME",             "label": "PME — Particle Mesh Ewald (recommended)"},
-            {"value": "Cut-off",         "label": "Cut-off"},
-            {"value": "Ewald",           "label": "Ewald (slow, reference)"},
-            {"value": "P3M-AD",          "label": "P3M-AD"},
-            {"value": "Reaction-Field",  "label": "Reaction-Field"},
-        ],
-        "positiveIons": [
-            {"value": "NA", "label": "Sodium (Na⁺)"},
-            {"value": "K",  "label": "Potassium (K⁺)"},
-            {"value": "MG", "label": "Magnesium (Mg²⁺)"},
-            {"value": "CA", "label": "Calcium (Ca²⁺)"},
-            {"value": "ZN", "label": "Zinc (Zn²⁺)"},
-        ],
-        "negativeIons": [
-            {"value": "CL", "label": "Chloride (Cl⁻)"},
-            {"value": "BR", "label": "Bromide (Br⁻)"},
-            {"value": "F",  "label": "Fluoride (F⁻)"},
-            {"value": "I",  "label": "Iodide (I⁻)"},
-        ],
-    })
 
+    return JsonResponse(
+        {
+            "forceFields": [
+                {"value": ff, "label": label, "category": category} for ff, label, category in FORCE_FIELDS
+            ],
+            "waterModels": [
+                {"value": wm, "label": label, "category": category} for wm, label, category in WATER_MODELS
+            ],
+            "boxTypes": [
+                {"value": "dodecahedron", "label": "Rhombic dodecahedron (recommended for globular proteins)"},
+                {"value": "cubic", "label": "Cubic"},
+                {"value": "octahedron", "label": "Truncated octahedron"},
+                {"value": "triclinic", "label": "Triclinic (custom)"},
+            ],
+            "minimizers": [
+                {"value": "steep", "label": "Steepest descent (robust, default)"},
+                {"value": "cg", "label": "Conjugate gradient (slower, more accurate)"},
+                {"value": "l-bfgs", "label": "L-BFGS quasi-Newton (fastest near minimum)"},
+            ],
+            "thermostats": [
+                {"value": "V-rescale", "label": "V-rescale (recommended)"},
+                {"value": "Nose-Hoover", "label": "Nosé-Hoover (rigorous canonical ensemble)"},
+                {"value": "Berendsen", "label": "Berendsen (fast, not rigorous)"},
+                {"value": "Andersen", "label": "Andersen (stochastic)"},
+                {"value": "no", "label": "None"},
+            ],
+            "barostats": [
+                {"value": "Parrinello-Rahman", "label": "Parrinello-Rahman (production quality)"},
+                {"value": "C-rescale", "label": "C-rescale (stochastic, good for equilibration)"},
+                {"value": "Berendsen", "label": "Berendsen (fast relaxation, equilibration only)"},
+                {"value": "MTTK", "label": "MTTK (Martyna-Tobias-Klein, rigorous)"},
+                {"value": "no", "label": "None (NVT)"},
+            ],
+            "constraints": [
+                {"value": "none", "label": "None"},
+                {"value": "h-bonds", "label": "H-bonds (recommended for 2 fs)"},
+                {"value": "all-bonds", "label": "All bonds"},
+                {"value": "h-angles", "label": "H-bond angles"},
+                {"value": "all-angles", "label": "All angles"},
+            ],
+            "integrators": [
+                {"value": "md", "label": "md — Leap-frog (default, fastest)"},
+                {"value": "md-vv", "label": "md-vv — Velocity Verlet (energy-conserving)"},
+                {"value": "sd", "label": "sd — Stochastic dynamics / Langevin"},
+                {"value": "bd", "label": "bd — Brownian dynamics (coarse-grained)"},
+            ],
+            "coulombTypes": [
+                {"value": "PME", "label": "PME — Particle Mesh Ewald (recommended)"},
+                {"value": "Cut-off", "label": "Cut-off"},
+                {"value": "Ewald", "label": "Ewald (slow, reference)"},
+                {"value": "P3M-AD", "label": "P3M-AD"},
+                {"value": "Reaction-Field", "label": "Reaction-Field"},
+            ],
+            "positiveIons": [
+                {"value": "NA", "label": "Sodium (Na⁺)"},
+                {"value": "K", "label": "Potassium (K⁺)"},
+                {"value": "MG", "label": "Magnesium (Mg²⁺)"},
+                {"value": "CA", "label": "Calcium (Ca²⁺)"},
+                {"value": "ZN", "label": "Zinc (Zn²⁺)"},
+            ],
+            "negativeIons": [
+                {"value": "CL", "label": "Chloride (Cl⁻)"},
+                {"value": "BR", "label": "Bromide (Br⁻)"},
+                {"value": "F", "label": "Fluoride (F⁻)"},
+                {"value": "I", "label": "Iodide (I⁻)"},
+            ],
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def analyze_simulation(request: HttpRequest, pk: int) -> JsonResponse:
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        tool_name = body.get("tool")
+        if not tool_name:
+            return JsonResponse({"error": "No tool specified."}, status=400)
+
+        job = visible_jobs(request).get(pk=pk)
+        if job.status != SimulationJob.Status.COMPLETED:
+            return JsonResponse({"error": "Analysis can only be run on completed jobs."}, status=400)
+
+        from .runner import run_analysis
+
+        result = run_analysis(pk, tool_name)
+        return JsonResponse(result)
+    except SimulationJob.DoesNotExist:
+        return JsonResponse({"error": "Job not found."}, status=404)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+@require_GET
+def gromacs_help(_request: HttpRequest, command: str) -> JsonResponse:
+    import os
+
+    allowed = ["pdb2gmx", "editconf", "solvate", "grompp", "genion", "mdrun", "energy"]
+    if command not in allowed:
+        return JsonResponse({"error": "Invalid command"}, status=400)
+
+    path = os.path.join(os.path.dirname(__file__), "gmx", f"{command}_help.txt")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return JsonResponse({"helpText": f.read()})
+    return JsonResponse({"error": "Help text not found"}, status=404)

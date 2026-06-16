@@ -6,6 +6,12 @@
 FROM ramsainanduri/growebby-base-frontend:latest
 
 WORKDIR /app
+
+# Copy package manifests and install any new dependencies
+# This ensures that packages added locally (like monaco-editor) are installed during build
+COPY package.json package-lock.json* ./
+RUN npm install
+
 COPY . .
 
 EXPOSE 5173

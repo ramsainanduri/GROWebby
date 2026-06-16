@@ -14,6 +14,7 @@ FROM ${BASE_IMAGE}
 
 WORKDIR /app
 COPY . .
+RUN apt-get update && apt-get install -y unzip && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir --break-system-packages tzdata
 RUN bash install_forcefields.sh
 

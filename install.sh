@@ -58,7 +58,6 @@ COMPOSE_PROFILES=$COMPOSE_PROFILES
 GROMACS_EXECUTION_MODE=$EXECUTION_MODE
 GROMACS_BINARY=$GROMACS_BINARY
 GROMACS_WORK_ROOT=/app/media/workspaces
-GROWEBBY_MEDIA_ROOT=$STATE_DIR/media
 BACKEND_BASE_IMAGE=$BACKEND_BASE_IMAGE
 EOF
 
@@ -68,9 +67,25 @@ COMPOSE_PROFILES=$COMPOSE_PROFILES
 GROMACS_EXECUTION_MODE=$EXECUTION_MODE
 GROMACS_BINARY=$GROMACS_BINARY
 GROMACS_WORK_ROOT=/app/media/workspaces
-GROWEBBY_MEDIA_ROOT=$STATE_DIR/media
 STATUS="$STATUS"
 EOF
+
+if [[ "$ENGINE" == "linux-nvidia-cuda" ]]; then
+  cat > "$ROOT_DIR/docker-compose.override.yml" <<EOF
+services:
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+EOF
+  echo "Wrote docker-compose.override.yml for NVIDIA GPU passthrough."
+else
+  rm -f "$ROOT_DIR/docker-compose.override.yml"
+fi
 
 echo "GROWebby engine selection"
 echo "  Host: $OS_NAME $ARCH_NAME"

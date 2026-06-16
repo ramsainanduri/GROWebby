@@ -7,7 +7,7 @@ services:
     build:
       context: ./backend
       args:
-        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-ramsainanduri/growebby-base-backend-cpu:latest}
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-ramsainanduri/growebby-base-backend-cuda:latest}
     environment:
       DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-local-gromacs-web-interface-key}"
       DJANGO_DEBUG: "${DJANGO_DEBUG:-0}"
@@ -23,6 +23,13 @@ services:
       GROWEBBY_ALLOW_VALIDATION_RUNS: "${GROWEBBY_ALLOW_VALIDATION_RUNS:-0}"
     ports:
       - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
     volumes:
       - ./backend:/app
       - ./.app_state/media:/app/media

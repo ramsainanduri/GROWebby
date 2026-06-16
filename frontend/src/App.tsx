@@ -3,9 +3,17 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
-import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -28,7 +36,7 @@ import {
   UploadedCoordinate,
   uploadCoordinate,
   getGromacsOptions,
-  GromacsOptions
+  GromacsOptions,
 } from "./lib/api";
 
 import { makeRunName, normalizeRunParameters, upsertRun } from "./lib/utils";
@@ -60,23 +68,84 @@ function MainApp() {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
   const [navCollapsed, setNavCollapsed] = useState(true);
-  const view = (location.pathname === "/" ? "dashboard" : location.pathname.substring(1)) as ViewKey;
-  const [activeStep, setActiveStep] = useState(0);
-  const [parameters, setParameters] = useState({ ...defaults, runName: makeRunName() });
-  const [upload, setUpload] = useState<UploadedCoordinate | null>(null);
+  const view = (
+    location.pathname === "/" ? "dashboard" : location.pathname.substring(1)
+  ) as ViewKey;
+  const [activeStep, setActiveStep] = useState(() => {
+    const saved = localStorage.getItem("growebby-step");
+    return saved ? Number(saved) : 0;
+  });
+  const [parameters, setParameters] = useState(() => {
+    const saved = localStorage.getItem("growebby-parameters");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return { ...defaults, runName: makeRunName() };
+  });
+  const [upload, setUpload] = useState<UploadedCoordinate | null>(() => {
+    const saved = localStorage.getItem("growebby-upload");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [uploads, setUploads] = useState<UploadedCoordinate[]>([]);
-  const [job, setJob] = useState<SimulationJob | null>(null);
+  const [job, setJob] = useState<SimulationJob | null>(() => {
+    const saved = localStorage.getItem("growebby-job");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return null;
+  });
   const [runs, setRuns] = useState<SimulationJob[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notifications, setNotifications] = useState<{ id: number; tone: "success" | "error" | "info"; message: string }[]>([]);
-  const [versionInfo, setVersionInfo] = useState<{ version: string; buildDate: string; tools: Record<string, string> } | null>(null);
+  const [notifications, setNotifications] = useState<
+    { id: number; tone: "success" | "error" | "info"; message: string }[]
+  >([]);
+  const [versionInfo, setVersionInfo] = useState<{
+    version: string;
+    buildDate: string;
+    tools: Record<string, string>;
+  } | null>(null);
   const [health, setHealth] = useState<HealthState | null>(null);
   const [gmxOptions, setGmxOptions] = useState<GromacsOptions | null>(null);
-  const [session, setSession] = useState<SessionState>({ isAuthenticated: false, user: null });
+  const [session, setSession] = useState<SessionState>({
+    isAuthenticated: false,
+    user: null,
+  });
   const [sessionChecked, setSessionChecked] = useState(false);
 
+  useEffect(() => {
+    localStorage.setItem("growebby-step", String(activeStep));
+  }, [activeStep]);
+
+  useEffect(() => {
+    localStorage.setItem("growebby-parameters", JSON.stringify(parameters));
+  }, [parameters]);
+
+  useEffect(() => {
+    if (upload) {
+      localStorage.setItem("growebby-upload", JSON.stringify(upload));
+    } else {
+      localStorage.removeItem("growebby-upload");
+    }
+  }, [upload]);
+
+  useEffect(() => {
+    if (job) {
+      localStorage.setItem("growebby-job", JSON.stringify(job));
+    } else {
+      localStorage.removeItem("growebby-job");
+    }
+  }, [job]);
 
   useEffect(() => {
     fetch("/version.json")
@@ -93,8 +162,15 @@ function MainApp() {
 
   function notify(tone: "success" | "error" | "info", message: string) {
     const id = Date.now() + Math.random();
-    setNotifications((current) => [...current.slice(-3), { id, tone, message }]);
-    window.setTimeout(() => setNotifications((current) => current.filter((item) => item.id !== id)), 6000);
+    setNotifications((current: any) => [
+      ...current.slice(-3),
+      { id, tone, message },
+    ]);
+    window.setTimeout(
+      () =>
+        setNotifications((current: any) => current.filter((item) => item.id !== id)),
+      6000,
+    );
   }
 
   function reportError(err: unknown, fallback: string) {
@@ -116,11 +192,12 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    if (!job || ["completed", "failed", "cancelled"].includes(job.status)) return;
+    if (!job || ["completed", "failed", "cancelled"].includes(job.status))
+      return;
     const timer = window.setInterval(async () => {
       const fresh = await getSimulation(job.id);
       setJob(fresh);
-      setRuns((current) => upsertRun(current, fresh));
+      setRuns((current: any) => upsertRun(current, fresh));
     }, 1000);
     return () => window.clearInterval(timer);
   }, [job]);
@@ -131,9 +208,13 @@ function MainApp() {
     source.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as { message: string };
-        setLogs((current) => current.includes(data.message) ? current : [...current.slice(-160), data.message]);
+        setLogs((current: any) =>
+          current.includes(data.message)
+            ? current
+            : [...current.slice(-160), data.message],
+        );
       } catch {
-        setLogs((current) => [...current.slice(-160), event.data]);
+        setLogs((current: any) => [...current.slice(-160), event.data]);
       }
     };
     source.addEventListener("done", () => source.close());
@@ -141,14 +222,27 @@ function MainApp() {
     return () => source.close();
   }, [job?.id]);
 
+  const handleNewRun = () => {
+    const newParams = { ...defaults, runGroupId: 0, runName: makeRunName() };
+    setParameters(newParams);
+    setUpload(null);
+    setJob(null);
+    setActiveStep(0);
+  };
+
   const canStart = useMemo(() => Boolean(upload && !busy), [upload, busy]);
   const completedRuns = runs.filter((run) => run.status === "completed");
-  const runningRuns = runs.filter((run) => run.status === "running" || run.status === "queued");
+  const runningRuns = runs.filter(
+    (run) => run.status === "running" || run.status === "queued",
+  );
   const failedRuns = runs.filter((run) => run.status === "failed");
 
   async function refreshWorkspace() {
     try {
-      const [freshRuns, freshUploads] = await Promise.all([listSimulations(), listUploads()]);
+      const [freshRuns, freshUploads] = await Promise.all([
+        listSimulations(),
+        listUploads(),
+      ]);
       setRuns(freshRuns);
       setUploads(freshUploads);
     } catch (err) {
@@ -163,8 +257,14 @@ function MainApp() {
     try {
       const uploaded = await uploadCoordinate(file);
       setUpload(uploaded);
-      setParameters((current) => ({ ...current, runName: current.runName || makeRunName(uploaded.originalName) }));
-      setUploads((current) => [uploaded, ...current.filter((item) => item.id !== uploaded.id)]);
+      setParameters((current: any) => ({
+        ...current,
+        runName: current.runName || makeRunName(uploaded.originalName),
+      }));
+      setUploads((current: any) => [
+        uploaded,
+        ...current.filter((item) => item.id !== uploaded.id),
+      ]);
       notify("success", `Uploaded ${uploaded.originalName}.`);
       navigate("/workflow");
     } catch (err) {
@@ -180,10 +280,17 @@ function MainApp() {
     setError("");
     setLogs([]);
     try {
-      const runParameters = normalizeRunParameters({ ...parameters, ...overrides });
-      const created = await createSimulation(upload!.id, runParameters, String(runParameters.runName));
+      const runParameters = normalizeRunParameters({
+        ...parameters,
+        ...overrides,
+      });
+      const created = await createSimulation(
+        upload!.id,
+        runParameters,
+        String(runParameters.runName),
+      );
       setJob(created);
-      setRuns((current) => upsertRun(current, created));
+      setRuns((current: any) => upsertRun(current, created));
       notify("success", `Started ${created.name}.`);
       navigate("/results");
     } catch (err) {
@@ -199,8 +306,15 @@ function MainApp() {
     try {
       const example = await createExampleSetup(exampleKey);
       setUpload(example.upload);
-      setUploads((current) => [example.upload, ...current.filter((item) => item.id !== example.upload.id)]);
-      setParameters({ ...defaults, runName: makeRunName(example.upload.originalName), ...example.parameters });
+      setUploads((current: any) => [
+        example.upload,
+        ...current.filter((item) => item.id !== example.upload.id),
+      ]);
+      setParameters({
+        ...defaults,
+        runName: makeRunName(example.upload.originalName),
+        ...example.parameters,
+      });
       notify("success", "Example setup created.");
       navigate("/workflow");
     } catch (err) {
@@ -217,7 +331,9 @@ function MainApp() {
     setError("");
     try {
       await deleteSimulation(runId);
-      setRuns((current) => current.filter((run) => (run.runGroupId ?? run.id) !== groupId));
+      setRuns((current: any) =>
+        current.filter((run) => (run.runGroupId ?? run.id) !== groupId),
+      );
       if (job && (job.runGroupId ?? job.id) === groupId) {
         setJob(null);
         setLogs([]);
@@ -233,9 +349,31 @@ function MainApp() {
     setError("");
     try {
       const renamed = await renameSimulation(runId, name);
-      setJob((current) => current?.id === runId ? renamed : current);
-      setRuns((current) => upsertRun(current.map((run) => (run.runGroupId ?? run.id) === renamed.runGroupId ? { ...run, name: renamed.name, workspaceSlug: renamed.workspaceSlug, parameters: { ...run.parameters, runName: renamed.name, runGroupId: renamed.runGroupId } } : run), renamed));
-      setParameters((current) => current.runName === name ? current : { ...current, runName: renamed.name });
+      setJob((current: any) => (current?.id === runId ? renamed : current));
+      setRuns((current: any) =>
+        upsertRun(
+          current.map((run) =>
+            (run.runGroupId ?? run.id) === renamed.runGroupId
+              ? {
+                  ...run,
+                  name: renamed.name,
+                  workspaceSlug: renamed.workspaceSlug,
+                  parameters: {
+                    ...run.parameters,
+                    runName: renamed.name,
+                    runGroupId: renamed.runGroupId,
+                  },
+                }
+              : run,
+          ),
+          renamed,
+        ),
+      );
+      setParameters((current: any) =>
+        current.runName === name
+          ? current
+          : { ...current, runName: renamed.name },
+      );
       notify("success", "Run renamed.");
     } catch (err) {
       reportError(err, "Could not rename run");
@@ -245,12 +383,19 @@ function MainApp() {
   async function cancelRun(runId: number) {
     const target = runs.find((run) => run.id === runId) ?? job;
     if (!target || !["queued", "running"].includes(target.status)) return;
-    if (!confirm(`Cancel ${target.name || `run #${target.id}`}? The active GROMACS process will be terminated.`)) return;
+    if (
+      !confirm(
+        `Cancel ${
+          target.name || `run #${target.id}`
+        }? The active GROMACS process will be terminated.`,
+      )
+    )
+      return;
     setError("");
     try {
       const cancelled = await cancelSimulation(runId);
-      setJob((current) => current?.id === runId ? cancelled : current);
-      setRuns((current) => upsertRun(current, cancelled));
+      setJob((current: any) => (current?.id === runId ? cancelled : current));
+      setRuns((current: any) => upsertRun(current, cancelled));
       notify("info", `Cancellation requested for ${cancelled.name}.`);
     } catch (err) {
       reportError(err, "Could not cancel run");
@@ -264,9 +409,13 @@ function MainApp() {
       const logEntries = await getSimulationLogs(runId);
       setJob(selected);
       setUpload(selected.upload);
-      setParameters({ ...defaults, runName: selected.name, ...selected.parameters });
+      setParameters({
+        ...defaults,
+        runName: selected.name,
+        ...selected.parameters,
+      });
       setLogs(logEntries.map((entry) => entry.message));
-      setRuns((current) => upsertRun(current, selected));
+      setRuns((current: any) => upsertRun(current, selected));
       navigate(`/${nextView}`);
     } catch (err) {
       reportError(err, "Could not load run");
@@ -274,14 +423,25 @@ function MainApp() {
   }
 
   function configureNextStepFromRun(run: SimulationJob) {
-    const lastStage = [...run.metrics].reverse().find((metric) => metric.stage)?.stage;
-    const currentStep = (run.parameters.startStep as string | undefined) ?? lastStage ?? "topology";
+    const lastStage = [...run.metrics].reverse().find((metric) => metric.stage)
+      ?.stage;
+    const currentStep =
+      (run.parameters.startStep as string | undefined) ??
+      lastStage ??
+      "topology";
     const currentIndex = steps.findIndex((step) => step.key === currentStep);
     const nextIndex = Math.min(Math.max(currentIndex, 0) + 1, steps.length - 1);
     const nextStep = steps[nextIndex].key;
     setActiveStep(nextIndex);
     setUpload(run.upload);
-    setParameters({ ...defaults, runName: run.name || makeRunName(run.upload.originalName), ...run.parameters, runGroupId: run.runGroupId ?? run.id, startStep: nextStep, runUntil: nextStep });
+    setParameters({
+      ...defaults,
+      runName: run.name || makeRunName(run.upload.originalName),
+      ...run.parameters,
+      runGroupId: run.runGroupId ?? run.id,
+      startStep: nextStep,
+      runUntil: nextStep,
+    });
     navigate("/workflow");
   }
 
@@ -314,20 +474,45 @@ function MainApp() {
 
   return (
     <main className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 transition dark:bg-slate-950 dark:text-slate-100">
-      <aside className={`${navCollapsed ? "w-[4.5rem]" : "w-[15.5rem] 2xl:w-[16.25rem]"} hidden shrink-0 border-r border-slate-200 bg-white transition-all dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col`}>
-        <div className={`flex h-14 2xl:h-16 items-center border-b border-slate-200 dark:border-slate-800 ${navCollapsed ? "justify-center px-2" : "gap-2.5 px-3"}`}>
+      <aside
+        className={`${
+          navCollapsed ? "w-[4.5rem]" : "w-[15.5rem] 2xl:w-[16.25rem]"
+        } hidden shrink-0 border-r border-slate-200 bg-white transition-all dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col`}
+      >
+        <div
+          className={`flex h-14 2xl:h-16 items-center border-b border-slate-200 dark:border-slate-800 ${
+            navCollapsed ? "justify-center px-2" : "gap-2.5 px-3"
+          }`}
+        >
           <div className="flex h-9 w-9 items-center justify-center 2xl:h-10 2xl:w-10">
-            <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
+            <img
+              src="/logo.svg"
+              alt="GROWebby Logo"
+              className="h-full w-full object-contain"
+            />
           </div>
           {!navCollapsed && (
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold 2xl:text-lg">GROWebby {versionInfo ? <span className="text-xs font-medium text-slate-500 dark:text-slate-400">v{versionInfo.version}</span> : null}</h1>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">MD operations console</p>
+              <h1 className="truncate text-base font-semibold 2xl:text-lg">
+                GROWebby{" "}
+                {versionInfo ? (
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    v{versionInfo.version}
+                  </span>
+                ) : null}
+              </h1>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                MD operations console
+              </p>
             </div>
           )}
         </div>
 
-        <nav className={`flex-1 space-y-1 overflow-auto ${navCollapsed ? "p-2" : "p-3"}`}>
+        <nav
+          className={`flex-1 space-y-1 overflow-auto ${
+            navCollapsed ? "p-2" : "p-3"
+          }`}
+        >
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -335,13 +520,19 @@ function MainApp() {
                 key={item.key}
                 to={`/${item.key}`}
                 aria-label={item.label}
-                className={`flex h-9 w-full items-center rounded-lg text-[0.8rem] font-semibold transition 2xl:h-10 ${navCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"} ${
-                  view === item.key ? "bg-ocean-100 text-ocean-800 dark:bg-ocean-900 dark:text-ocean-100" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                className={`flex h-9 w-full items-center rounded-lg text-[0.8rem] font-semibold transition 2xl:h-10 ${
+                  navCollapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+                } ${
+                  view === item.key
+                    ? "bg-ocean-100 text-ocean-800 dark:bg-ocean-900 dark:text-ocean-100"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                 }`}
                 title={navCollapsed ? item.label : undefined}
               >
                 <Icon size="1.18em" />
-                {!navCollapsed && <span className="truncate">{item.label}</span>}
+                {!navCollapsed && (
+                  <span className="truncate">{item.label}</span>
+                )}
               </Link>
             );
           })}
@@ -354,7 +545,11 @@ function MainApp() {
             className="flex h-9 w-full items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-ocean-500 hover:text-ocean-700 dark:border-slate-700 dark:text-slate-200 2xl:h-10"
             title={navCollapsed ? "Expand navigation" : "Collapse navigation"}
           >
-            {navCollapsed ? <ChevronRight size="1.12em" /> : <ChevronLeft size="1.12em" />}
+            {navCollapsed ? (
+              <ChevronRight size="1.12em" />
+            ) : (
+              <ChevronLeft size="1.12em" />
+            )}
           </button>
         </div>
       </aside>
@@ -363,11 +558,23 @@ function MainApp() {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 2xl:h-16 2xl:px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="lg:hidden flex h-9 w-9 items-center justify-center">
-              <img src="/logo.svg" alt="GROWebby Logo" className="h-full w-full object-contain" />
+              <img
+                src="/logo.svg"
+                alt="GROWebby Logo"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold 2xl:text-lg">{navItems.find((item) => item.key === view)?.label}</h2>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">{job ? `Focused on run #${job.id} · ${job.currentStep}` : `GROWebby${versionInfo ? ` v${versionInfo.version}` : ""} · Configure, launch, and review molecular dynamics runs`}</p>
+              <h2 className="truncate text-base font-semibold 2xl:text-lg">
+                {navItems.find((item) => item.key === view)?.label}
+              </h2>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">
+                {job
+                  ? `Focused on run #${job.id} · ${job.currentStep}`
+                  : `GROWebby${
+                      versionInfo ? ` v${versionInfo.version}` : ""
+                    } · Configure, launch, and review molecular dynamics runs`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -389,7 +596,10 @@ function MainApp() {
               <LogOut size="1.08em" />
               <span className="hidden sm:inline">{session.user?.username}</span>
             </button>
-            <ThemeToggle dark={dark} onToggle={() => setDark((value) => !value)} />
+            <ThemeToggle
+              dark={dark}
+              onToggle={() => setDark((value) => !value)}
+            />
           </div>
         </header>
 
@@ -401,7 +611,9 @@ function MainApp() {
                 key={item.key}
                 to={`/${item.key}`}
                 className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                  view === item.key ? "bg-ocean-100 text-ocean-800 dark:bg-ocean-900 dark:text-ocean-100" : "text-slate-600 dark:text-slate-300"
+                  view === item.key
+                    ? "bg-ocean-100 text-ocean-800 dark:bg-ocean-900 dark:text-ocean-100"
+                    : "text-slate-600 dark:text-slate-300"
                 }`}
               >
                 <Icon size={16} />
@@ -414,11 +626,83 @@ function MainApp() {
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardView completedRuns={completedRuns.length} createExample={createExample} failedRuns={failedRuns.length} job={job} runningRuns={runningRuns.length} uploadsCount={uploads.length} busy={busy} />} />
-            <Route path="/workflow" element={<WorkflowView activeStep={activeStep} busy={busy} canStart={canStart} handleFile={handleFile} health={health} job={job} parameters={parameters} setActiveStep={setActiveStep} setParameters={setParameters} startSimulation={startSimulation} upload={upload} uploads={uploads} selectUpload={(selected) => { setUpload(selected); navigate("/workflow"); }} dark={dark} gmxOptions={gmxOptions} />} />
-            <Route path="/files" element={<FilesView handleFile={handleFile} selectUpload={setUpload} upload={upload} uploads={uploads} />} />
-            <Route path="/runs" element={<RunsView job={job} runs={runs} removeRun={removeRun} selectRun={selectRun} />} />
-            <Route path="/results" element={<ResultsView cancelRun={cancelRun} configureNextStep={configureNextStepFromRun} job={job} logs={logs} notify={notify} renameRun={renameRun} selectRun={selectRun} dark={dark} />} />
+            <Route
+              path="/dashboard"
+              element={
+                <DashboardView
+                  completedRuns={completedRuns.length}
+                  createExample={createExample}
+                  failedRuns={failedRuns.length}
+                  job={job}
+                  runningRuns={runningRuns.length}
+                  uploadsCount={uploads.length}
+                  busy={busy}
+                />
+              }
+            />
+            <Route
+              path="/workflow"
+              element={
+                <WorkflowView
+                  activeStep={activeStep}
+                  busy={busy}
+                  canStart={canStart}
+                  handleFile={handleFile}
+                  health={health}
+                  job={job}
+                  parameters={parameters}
+                  setActiveStep={setActiveStep}
+                  setParameters={setParameters}
+                  startSimulation={startSimulation}
+                  upload={upload}
+                  uploads={uploads}
+                  selectUpload={(selected) => {
+                    setUpload(selected);
+                    navigate("/workflow");
+                  }}
+                  dark={dark}
+                  gmxOptions={gmxOptions}
+                  handleNewRun={handleNewRun}
+                />
+              }
+            />
+            <Route
+              path="/files"
+              element={
+                <FilesView
+                  handleFile={handleFile}
+                  selectUpload={setUpload}
+                  upload={upload}
+                  uploads={uploads}
+                />
+              }
+            />
+            <Route
+              path="/runs"
+              element={
+                <RunsView
+                  job={job}
+                  runs={runs}
+                  removeRun={removeRun}
+                  selectRun={selectRun}
+                />
+              }
+            />
+            <Route
+              path="/results"
+              element={
+                <ResultsView
+                  cancelRun={cancelRun}
+                  configureNextStep={configureNextStepFromRun}
+                  job={job}
+                  logs={logs}
+                  notify={notify}
+                  renameRun={renameRun}
+                  selectRun={selectRun}
+                  dark={dark}
+                />
+              }
+            />
             <Route path="/stats" element={<StatsView runs={runs} />} />
             <Route path="/admin" element={<AdminView session={session} />} />
             <Route path="/about" element={<AboutView />} />
@@ -426,7 +710,14 @@ function MainApp() {
           </Routes>
         </div>
       </section>
-      <NotificationStack notifications={notifications} dismiss={(id) => setNotifications((current) => current.filter((item) => item.id !== id))} />
+      <NotificationStack
+        notifications={notifications}
+        dismiss={(id) =>
+          setNotifications((current: any) =>
+            current.filter((item) => item.id !== id),
+          )
+        }
+      />
     </main>
   );
 }
