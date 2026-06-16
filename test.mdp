@@ -1,0 +1,4 @@
+title = My Dynamic Name
+integrator = steep
+emtol = 1000
+nsteps = 1

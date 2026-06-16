@@ -596,7 +596,7 @@ def write_artifact(job: SimulationJob, name: str, content: str) -> str:
 # ── MDP file generation ───────────────────────────────────────────────────────
 
 
-def make_mdp(parameters: dict[str, Any], stage: str) -> str:
+def make_mdp(job_name: str, parameters: dict[str, Any], stage: str) -> str:
     """
     Generate a GROMACS MDP parameter file for ``stage``.
     All parameters are read from the ``parameters`` dict so the frontend can
@@ -610,6 +610,7 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
     if stage == "ions":
         return "\n".join(
             [
+                f"title                   = {job_name}",
                 "; created by GROWebby for ion placement",
                 "integrator              = steep",
                 f"emtol                   = {parameters.get('ionEmtol', 1000)}",
@@ -625,6 +626,7 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
         minim_output_nst = max(1, minimization_steps // 100)
         integrator = str(parameters.get("minimizer", "steep"))
         lines = [
+            f"title                   = {job_name}",
             "; created by GROWebby for energy minimisation",
             f"integrator              = {integrator}",
             f"emtol                   = {parameters.get('emtol', 1000.0)}",
@@ -676,6 +678,7 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
     integrator = str(parameters.get("integrator", "md"))
 
     lines = [
+        f"title                   = {job_name}",
         f"; created by GROWebby for {stage}",
         f"integrator              = {integrator}",
         f"dt                      = {dt}",
@@ -929,20 +932,29 @@ def completed_step_available(upload, step_key: str, owner=None) -> bool:
     return latest_completed_job_with_step(upload, step_key, owner) is not None
 
 
-def import_previous_step_workspace(job: SimulationJob, step_key: str) -> None:
+def import_previous_step_workspace(job: SimulationJob, step_key: str) -> list[dict[str, str]]:
     previous = previous_step_key(step_key)
     if previous is None:
-        return
+        return []
     owner = None if job.owner and job.owner.is_staff else job.owner
     source_job = latest_completed_job_with_step(job.upload, previous, owner)
     if source_job is None or not source_job.workspace_slug:
-        return
+        return []
     source = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(source_job) / source_job.workspace_slug
     target = run_workspace(job)
     if not source.exists() or source.resolve() == target.resolve():
-        return
+        return []
     shutil.copytree(source, target, dirs_exist_ok=True)
     append_log(job, f"Imported files from previous step run #{source_job.id} ({previous.upper()}) before continuing.")
+
+    inherited_artifacts = []
+    for artifact in source_job.parameters.get("artifactFiles", []):
+        if isinstance(artifact, dict) and "url" in artifact and "name" in artifact and "path" in artifact:
+            # Create a shallow copy and rewrite URL to point to current workspace since we copied physical files
+            new_artifact = artifact.copy()
+            new_artifact["url"] = workspace_media_url(job, artifact["path"])
+            inherited_artifacts.append(new_artifact)
+    return inherited_artifacts
 
 
 def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[dict[str, str]]:
@@ -983,11 +995,11 @@ def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[di
         append_log(job, f"Could not copy input into workspace: {exc}")
 
     for name, content in {
-        "ions.mdp": make_mdp(parameters, "ions"),
-        "minim.mdp": make_mdp(parameters, "minim"),
-        "nvt.mdp": make_mdp(parameters, "nvt"),
-        "npt.mdp": make_mdp(parameters, "npt"),
-        "production.mdp": make_mdp(parameters, "production"),
+        "ions.mdp": make_mdp(job.name, parameters, "ions"),
+        "minim.mdp": make_mdp(job.name, parameters, "minim"),
+        "nvt.mdp": make_mdp(job.name, parameters, "nvt"),
+        "npt.mdp": make_mdp(job.name, parameters, "npt"),
+        "production.mdp": make_mdp(job.name, parameters, "production"),
         "workflow-preview.txt": str(parameters.get("generatedConfig", "")).strip(),
         "run-manifest.json": json.dumps(
             {
@@ -1051,10 +1063,11 @@ def run_simulation(job_id: int) -> None:
             start_step = "nvt"
         if run_until == "equilibrate":
             run_until = "npt"
+        inherited_artifacts = []
         if not use_validation:
-            import_previous_step_workspace(job, start_step)
+            inherited_artifacts = import_previous_step_workspace(job, start_step)
         artifacts = persist_run_files(job, parameters)
-        parameters["artifactFiles"] = artifacts
+        parameters["artifactFiles"] = inherited_artifacts + artifacts
         job.parameters = parameters
         job.save(update_fields=["parameters", "updated_at"])
         append_log(job, f"Run workspace prepared with {len(artifacts)} stored files.")
