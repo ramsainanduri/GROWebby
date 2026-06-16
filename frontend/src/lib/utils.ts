@@ -208,11 +208,15 @@ export function downloadAllMetricsCsv(
 export function downloadChartSvg(
   filename: string,
   container: HTMLDivElement | null,
+  bgColor: string = "transparent",
 ) {
   const svg = container?.querySelector("svg");
   if (!svg) return;
   const clone = svg.cloneNode(true) as SVGElement;
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (bgColor !== "transparent") {
+    clone.style.backgroundColor = bgColor;
+  }
   const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
     type: "image/svg+xml;charset=utf-8",
   });

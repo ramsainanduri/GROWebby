@@ -39,6 +39,7 @@ export function PlotCard({
   const [showPoints, setShowPoints] = useState(false);
   const [showEqLine, setShowEqLine] = useState(false);
   const [color, setColor] = useState(series.color);
+  const [exportBg, setExportBg] = useState("transparent");
   const xKey = metrics.some((metric) => Number.isFinite(Number(metric.timePs)))
     ? "timePs"
     : metrics.some((metric) => Number.isFinite(Number(metric.sample)))
@@ -257,7 +258,20 @@ export function PlotCard({
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <div className="mt-3 flex flex-wrap justify-end gap-2">
+      <div className="mt-3 flex flex-wrap justify-end gap-2 items-center">
+        <div className="mr-auto text-xs text-slate-500 dark:text-slate-400">
+          Source: {stageFilter}-metrics.csv
+        </div>
+        <select
+          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700 dark:bg-slate-800"
+          value={exportBg}
+          onChange={(e) => setExportBg(e.target.value)}
+          aria-label="Export background color"
+        >
+          <option value="transparent">Transparent Bg</option>
+          <option value="#ffffff">White Bg</option>
+          <option value="#0f172a">Dark Bg</option>
+        </select>
         <button
           type="button"
           className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -278,6 +292,7 @@ export function PlotCard({
             downloadChartSvg(
               `${jobName}-${series.key}-${stageFilter}.svg`,
               chartRef.current,
+              exportBg,
             )
           }
         >
