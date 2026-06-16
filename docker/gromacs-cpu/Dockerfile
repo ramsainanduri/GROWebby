@@ -35,7 +35,8 @@ RUN curl -fsSL https://ftp.gromacs.org/gromacs/gromacs-2026.2.tar.gz -o /tmp/gro
 ENV PATH="/usr/local/gromacs/bin:${PATH}" \
     GMXBIN="/usr/local/gromacs/bin" \
     CMAKE_PREFIX_PATH="/usr/local/gromacs" \
-    LD_LIBRARY_PATH="/usr/local/gromacs/lib:${LD_LIBRARY_PATH}"
+    LD_LIBRARY_PATH="/usr/local/gromacs/lib:${LD_LIBRARY_PATH}" \
+    gmxapi_ROOT="/usr/local/gromacs"
 
 RUN python3 -m pip install --no-cache-dir --break-system-packages "gmxapi>=0.4.2" \
     && python3 -c "import gmxapi; print('gmxapi', gmxapi.__version__)" \

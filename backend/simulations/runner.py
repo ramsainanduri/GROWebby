@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import math
 import json
+import math
 import os
 import random
 import shutil
@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.core.mail import send_mail
 from django.db import close_old_connections
-from django.utils.text import slugify
 from django.utils import timezone
+from django.utils.text import slugify
 
 from .models import SimulationJob, SimulationLog
 
@@ -22,22 +23,32 @@ PIPELINE_STEPS = [
     ("topology", "Topology Generation", 12),
     ("box", "Box Definition", 24),
     ("solvation", "Solvation", 38),
-    ("ions", "Adding Ions", 50),
-    ("minimize", "Energy Minimization", 66),
-    ("nvt", "NVT Equilibration", 76),
-    ("npt", "NPT Equilibration", 88),
-    ("production", "Production MD", 100),
+    ("ions_grompp", "Ions Configuration", 44),
+    ("ions_genion", "Adding Ions", 50),
+    ("minimize_grompp", "Minimization Configuration", 58),
+    ("minimize_mdrun", "Energy Minimization", 66),
+    ("nvt_grompp", "NVT Configuration", 71),
+    ("nvt_mdrun", "NVT Equilibration", 76),
+    ("npt_grompp", "NPT Configuration", 82),
+    ("npt_mdrun", "NPT Equilibration", 88),
+    ("production_grompp", "Production Configuration", 94),
+    ("production_mdrun", "Production MD", 100),
 ]
 
 STEP_OUTPUTS = {
     "topology": "outputs/processed.gro",
     "box": "outputs/boxed.gro",
     "solvation": "outputs/solvated.gro",
-    "ions": "outputs/ionized.gro",
-    "minimize": "minim.gro",
-    "nvt": "nvt.gro",
-    "npt": "npt.gro",
-    "production": "production.gro",
+    "ions_grompp": "ions.tpr",
+    "ions_genion": "outputs/ionized.gro",
+    "minimize_grompp": "minim.tpr",
+    "minimize_mdrun": "minim.gro",
+    "nvt_grompp": "nvt.tpr",
+    "nvt_mdrun": "nvt.gro",
+    "npt_grompp": "npt.tpr",
+    "npt_mdrun": "npt.gro",
+    "production_grompp": "production.tpr",
+    "production_mdrun": "production.gro",
 }
 
 ENERGY_TERMS = [
@@ -74,53 +85,49 @@ ENERGY_NAME_TO_KEY = {
 # Each entry: (ff_dir_name, display_label, category)
 FORCE_FIELDS: list[tuple[str, str, str]] = [
     # AMBER family
-    ("amber94",        "AMBER94",                        "AMBER"),
-    ("amber96",        "AMBER96",                        "AMBER"),
-    ("amber99",        "AMBER99",                        "AMBER"),
-    ("amber99sb",      "AMBER99SB",                      "AMBER"),
-    ("amber99sb-ildn", "AMBER99SB-ILDN (recommended)",   "AMBER"),
-    ("amberGS",        "AMBER-GS",                       "AMBER"),
-    ("amber03",        "AMBER03",                        "AMBER"),
-    ("amber03ws",      "AMBER03ws (w/ water)",           "AMBER"),
-    ("amber14sb",      "AMBER14SB",                      "AMBER"),
-    ("amber14sb_OL15", "AMBER14SB + OL15 RNA/DNA",       "AMBER"),
+    ("amber94", "AMBER94", "AMBER"),
+    ("amber96", "AMBER96", "AMBER"),
+    ("amber99", "AMBER99", "AMBER"),
+    ("amber99sb", "AMBER99SB", "AMBER"),
+    ("amber99sb-ildn", "AMBER99SB-ILDN (recommended)", "AMBER"),
+    ("amber03", "AMBER03", "AMBER"),
+    ("amber03ws", "AMBER03ws (w/ water)", "AMBER"),
+    ("amber14sb", "AMBER14SB", "AMBER"),
+    ("amber14sb_OL15", "AMBER14SB + OL15 RNA/DNA", "AMBER"),
     # CHARMM family
-    ("charmm27",       "CHARMM27",                       "CHARMM"),
-    ("charmm36",       "CHARMM36",                       "CHARMM"),
-    ("charmm36-feb2021","CHARMM36 (Feb 2021)",           "CHARMM"),
-    ("charmm36m",      "CHARMM36m (IDP-improved)",       "CHARMM"),
-    ("charmmm36-mar2019","CHARMM36 (Mar 2019)",          "CHARMM"),
+    ("charmm27", "CHARMM27", "CHARMM"),
+    ("charmm36", "CHARMM36", "CHARMM"),
+    ("charmm36-feb2021", "CHARMM36 (Feb 2021)", "CHARMM"),
+    ("charmm36m", "CHARMM36m (IDP-improved)", "CHARMM"),
+    ("charmm36-mar2019", "CHARMM36 (Mar 2019)", "CHARMM"),
     # GROMOS family
-    ("gromos43a1",     "GROMOS43A1",                     "GROMOS"),
-    ("gromos43a2",     "GROMOS43A2",                     "GROMOS"),
-    ("gromos45a3",     "GROMOS45A3",                     "GROMOS"),
-    ("gromos53a5",     "GROMOS53A5",                     "GROMOS"),
-    ("gromos53a6",     "GROMOS53A6",                     "GROMOS"),
-    ("gromos54a7",     "GROMOS54A7",                     "GROMOS"),
+    ("gromos43a1", "GROMOS43A1", "GROMOS"),
+    ("gromos43a2", "GROMOS43A2", "GROMOS"),
+    ("gromos45a3", "GROMOS45A3", "GROMOS"),
+    ("gromos53a5", "GROMOS53A5", "GROMOS"),
+    ("gromos53a6", "GROMOS53A6", "GROMOS"),
+    ("gromos54a7", "GROMOS54A7", "GROMOS"),
     # OPLS family
-    ("oplsaa",         "OPLS-AA/L (all-atom)",           "OPLS"),
-    ("oplsaa_SEI",     "OPLS-AA/L + SEI ions",           "OPLS"),
-    # Other / special
-    ("amoeba",         "AMOEBA (polarizable)",           "Polarizable"),
+    ("oplsaa", "OPLS-AA/L (all-atom)", "OPLS"),
 ]
 
 # ── All water models shipped with GROMACS ────────────────────────────────────
 # Values are the -water flag argument for pdb2gmx.
 WATER_MODELS: list[tuple[str, str, str]] = [
-    ("tip3p",   "TIP3P (3-site, most common)",        "3-site"),
-    ("tip4p",   "TIP4P (4-site)",                     "4-site"),
-    ("tip4pew", "TIP4P/Ew (4-site, Ewald)",           "4-site"),
-    ("tip4p2005","TIP4P/2005",                        "4-site"),
-    ("tip5p",   "TIP5P (5-site)",                     "5-site"),
-    ("tip5pe",  "TIP5P-E (5-site extended)",          "5-site"),
-    ("spc",     "SPC (simple point charge)",          "3-site"),
-    ("spce",    "SPC/E (extended SPC)",               "3-site"),
-    ("spceb",   "SPC/Eb",                             "3-site"),
-    ("opc",     "OPC (optimal 4-site)",               "4-site"),
-    ("opc3",    "OPC3 (optimal 3-site)",              "3-site"),
-    ("fb3",     "FB3 (force-balanced 3-site)",        "3-site"),
-    ("fb4",     "FB4 (force-balanced 4-site)",        "4-site"),
-    ("none",    "None (implicit or dry system)",      "special"),
+    ("tip3p", "TIP3P (3-site, most common)", "3-site"),
+    ("tip4p", "TIP4P (4-site)", "4-site"),
+    ("tip4pew", "TIP4P/Ew (4-site, Ewald)", "4-site"),
+    ("tip4p2005", "TIP4P/2005", "4-site"),
+    ("tip5p", "TIP5P (5-site)", "5-site"),
+    ("tip5pe", "TIP5P-E (5-site extended)", "5-site"),
+    ("spc", "SPC (simple point charge)", "3-site"),
+    ("spce", "SPC/E (extended SPC)", "3-site"),
+    ("spceb", "SPC/Eb", "3-site"),
+    ("opc", "OPC (optimal 4-site)", "4-site"),
+    ("opc3", "OPC3 (optimal 3-site)", "3-site"),
+    ("fb3", "FB3 (force-balanced 3-site)", "3-site"),
+    ("fb4", "FB4 (force-balanced 4-site)", "4-site"),
+    ("none", "None (implicit or dry system)", "special"),
 ]
 
 
@@ -175,6 +182,20 @@ def gmxapi_available() -> bool:
     return True
 
 
+def fix_workspace_permissions(workspace: Path) -> None:
+    try:
+        uid = int(os.environ.get("HOST_UID", 1000))
+        gid = int(os.environ.get("HOST_GID", 1000))
+        os.chown(workspace, uid, gid)
+        for root, dirs, files in os.walk(workspace):
+            for d in dirs:
+                os.chown(os.path.join(root, d), uid, gid)
+            for f in files:
+                os.chown(os.path.join(root, f), uid, gid)
+    except Exception:
+        pass
+
+
 def gmx_binary() -> str | None:
     configured = os.environ.get("GROMACS_BINARY", "").strip()
     if configured:
@@ -185,13 +206,11 @@ def gmx_binary() -> str | None:
 def gpu_execution_available() -> bool:
     mode = os.environ.get("GROMACS_EXECUTION_MODE", "")
     engine = os.environ.get("GROWEBBY_ENGINE", "")
-    if "cuda" in mode or "cuda" in engine:
-        return True
-    if "native-opencl" not in mode and "mac-opencl-native" not in engine:
-        return False
+
     gmx = gmx_binary()
     if not gmx:
         return False
+
     try:
         completed = subprocess.run(
             [gmx, "--version"],
@@ -203,10 +222,27 @@ def gpu_execution_available() -> bool:
         )
     except Exception:
         return False
-    return "GPU support:" in completed.stdout and "OpenCL" in completed.stdout
+
+    out = completed.stdout
+    # For CUDA, if driver is 0.0, no physical GPU was detected
+    if "GPU support:         CUDA" in out or "GPU support: CUDA" in out:
+        if "CUDA driver:         0.0" in out or "CUDA driver: 0.0" in out:
+            return False
+        return True
+
+    # For OpenCL/SYCL/HIP backends
+    if "OpenCL" in out or "SYCL" in out or "HIP" in out:
+        return True
+
+    # Fallback checking string if unknown
+    if "cuda" in mode or "cuda" in engine:
+        return True
+
+    return False
 
 
 # ── Per-user workspace path helpers ──────────────────────────────────────────
+
 
 def user_dir_for_job(job: SimulationJob) -> str:
     """
@@ -242,7 +278,10 @@ def workspace_media_url(job: SimulationJob, relative: str = "") -> str:
 
 # ── Artifact helpers ──────────────────────────────────────────────────────────
 
-def run_command(job: SimulationJob, command: list[str], cwd, stdin: str | None = None, step_key: str = "workflow") -> None:
+
+def run_command(
+    job: SimulationJob, command: list[str], cwd, stdin: str | None = None, step_key: str = "workflow"
+) -> None:
     check_cancelled(job)
     label = clean_command_label(command)
     command_name = command[1] if len(command) > 1 and Path(command[0]).name == "gmx" else Path(command[0]).name
@@ -269,7 +308,9 @@ def run_command(job: SimulationJob, command: list[str], cwd, stdin: str | None =
         append_log(job, f"GROMACS command failed with exit code {process.returncode}: {label}")
         if tail:
             append_log(job, f"Error details from {log_name}:\n{tail}")
-        raise RuntimeError(f"GROMACS command failed ({process.returncode}): {label}. See {log_name} for the full output.")
+        raise RuntimeError(
+            f"GROMACS command failed ({process.returncode}): {label}. See {log_name} for the full output."
+        )
     append_log(job, f"GROMACS command completed: {label}. Full output saved to {log_name}.")
 
 
@@ -341,7 +382,9 @@ def parse_xvg_metrics(path, step_key: str, progress: int) -> list[dict[str, Any]
     return rows
 
 
-def extract_energy_metrics(job: SimulationJob, workspace, step_key: str, deffnm: str, progress: int) -> list[dict[str, Any]]:
+def extract_energy_metrics(
+    job: SimulationJob, workspace, step_key: str, deffnm: str, progress: int
+) -> list[dict[str, Any]]:
     gmx = gmx_binary()
     if not gmx:
         return []
@@ -356,7 +399,9 @@ def extract_energy_metrics(job: SimulationJob, workspace, step_key: str, deffnm:
         selected_rows: list[dict[str, Any]] = []
         for term, _key, _label, _unit in ENERGY_TERMS:
             term_xvg = workspace / "analysis" / f"{step_key}-{term.lower().replace('.', '').replace('-', '-')}.xvg"
-            term_result = run_quiet([gmx, "energy", "-f", str(edr), "-o", str(term_xvg)], workspace, stdin=f"{term}\n0\n", timeout=15)
+            term_result = run_quiet(
+                [gmx, "energy", "-f", str(edr), "-o", str(term_xvg)], workspace, stdin=f"{term}\n0\n", timeout=15
+            )
             if term_result.returncode == 0:
                 term_rows = parse_xvg_metrics(term_xvg, step_key, progress)
                 if not selected_rows:
@@ -364,7 +409,13 @@ def extract_energy_metrics(job: SimulationJob, workspace, step_key: str, deffnm:
                 else:
                     for index, row in enumerate(term_rows):
                         if index < len(selected_rows):
-                            selected_rows[index].update({key: value for key, value in row.items() if key not in {"stage", "progress", "timePs", "sample"}})
+                            selected_rows[index].update(
+                                {
+                                    key: value
+                                    for key, value in row.items()
+                                    if key not in {"stage", "progress", "timePs", "sample"}
+                                }
+                            )
         return selected_rows
     return parse_xvg_metrics(xvg, step_key, progress)
 
@@ -374,13 +425,37 @@ def expected_metric_points(step_key: str, parameters: dict[str, Any]) -> int:
     output_every_ps = float(parameters.get("outputEveryPs", 10))
     output_nst = max(1, round(output_every_ps / dt))
     if step_key == "minimize":
-        return max(1, int(parameters.get("minimizationSteps", 50000)) // max(1, int(parameters.get("minimizationSteps", 50000)) // 100))
-    ps = float(parameters.get("productionNs", 10)) * 1000 if step_key == "production" else float(parameters.get(f"{step_key}Ps", 100))
+        return max(
+            1,
+            int(parameters.get("minimizationSteps", 50000))
+            // max(1, int(parameters.get("minimizationSteps", 50000)) // 100),
+        )
+    ps = (
+        float(parameters.get("productionNs", 10)) * 1000
+        if step_key == "production"
+        else float(parameters.get(f"{step_key}Ps", 100))
+    )
     return max(1, round((ps / dt) / output_nst))
 
 
 def metrics_to_csv(metrics: list[dict[str, Any]]) -> str:
-    preferred = ["stage", "progress", "sample", "timePs", "energy", "potential", "totalEnergy", "kineticEnergy", "temperature", "pressure", "density", "lj14", "coulomb14", "ljSR", "coulombSR"]
+    preferred = [
+        "stage",
+        "progress",
+        "sample",
+        "timePs",
+        "energy",
+        "potential",
+        "totalEnergy",
+        "kineticEnergy",
+        "temperature",
+        "pressure",
+        "density",
+        "lj14",
+        "coulomb14",
+        "ljSR",
+        "coulombSR",
+    ]
     keys = [key for key in preferred if any(key in metric for metric in metrics)]
     keys.extend(sorted({key for metric in metrics for key in metric.keys()} - set(keys)))
     if not keys:
@@ -425,10 +500,19 @@ def run_mdrun_with_live_metrics(
     def stream_output() -> None:
         if not process.stdout:
             return
+        batch = []
+        last_flush = time.time()
         for line in process.stdout:
             stripped = line.rstrip()
             if stripped:
                 output_lines.append(stripped)
+                batch.append(stripped)
+            if batch and (time.time() - last_flush > 1.0 or len(batch) >= 20):
+                append_log(job, "\n".join(batch))
+                batch = []
+                last_flush = time.time()
+        if batch:
+            append_log(job, "\n".join(batch))
 
     thread = threading.Thread(target=stream_output, daemon=True)
     thread.start()
@@ -445,13 +529,19 @@ def run_mdrun_with_live_metrics(
             if len(extracted) > last_count:
                 last_count = len(extracted)
                 span = max(1, target_progress - previous_progress)
-                live_progress = min(target_progress - 1, previous_progress + max(1, round(span * min(0.95, len(extracted) / expected_points))))
+                live_progress = min(
+                    target_progress - 1,
+                    previous_progress + max(1, round(span * min(0.95, len(extracted) / expected_points))),
+                )
                 stage_metrics = [{**row, "progress": live_progress} for row in extracted]
                 publish_metrics(job, [*base_metrics, *stage_metrics], live_progress)
             else:
                 live_sample += 1
                 span = max(1, target_progress - previous_progress)
-                live_progress = min(target_progress - 1, previous_progress + max(1, round(span * min(0.92, live_sample / max(6, expected_points)))))
+                live_progress = min(
+                    target_progress - 1,
+                    previous_progress + max(1, round(span * min(0.92, live_sample / max(6, expected_points)))),
+                )
                 fallback_metric = {
                     "stage": step_key,
                     "progress": live_progress,
@@ -505,7 +595,8 @@ def write_artifact(job: SimulationJob, name: str, content: str) -> str:
 
 # ── MDP file generation ───────────────────────────────────────────────────────
 
-def make_mdp(parameters: dict[str, Any], stage: str) -> str:
+
+def make_mdp(job_name: str, parameters: dict[str, Any], stage: str) -> str:
     """
     Generate a GROMACS MDP parameter file for ``stage``.
     All parameters are read from the ``parameters`` dict so the frontend can
@@ -517,14 +608,17 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
 
     # ── Ion placement: minimal steep descent for grompp purposes ─────────────
     if stage == "ions":
-        return "\n".join([
-            "; created by GROWebby for ion placement",
-            "integrator              = steep",
-            f"emtol                   = {parameters.get('ionEmtol', 1000)}",
-            f"emstep                  = {parameters.get('ionEmstep', 0.01)}",
-            "nsteps                  = 500",
-            "",
-        ])
+        return "\n".join(
+            [
+                f"title                   = {job_name}",
+                "; created by GROWebby for ion placement",
+                "integrator              = steep",
+                f"emtol                   = {parameters.get('ionEmtol', 1000)}",
+                f"emstep                  = {parameters.get('ionEmstep', 0.01)}",
+                "nsteps                  = 500",
+                "",
+            ]
+        )
 
     # ── Energy minimisation ───────────────────────────────────────────────────
     if stage == "minim":
@@ -532,6 +626,7 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
         minim_output_nst = max(1, minimization_steps // 100)
         integrator = str(parameters.get("minimizer", "steep"))
         lines = [
+            f"title                   = {job_name}",
             "; created by GROWebby for energy minimisation",
             f"integrator              = {integrator}",
             f"emtol                   = {parameters.get('emtol', 1000.0)}",
@@ -565,24 +660,25 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
         ps = float(parameters.get(f"{stage}Ps", parameters.get("equilibrationPs", 100)))
 
     nsteps = round(ps / dt)
-    thermostat   = str(parameters.get("thermostat", "V-rescale"))
-    temperature  = float(parameters.get("temperature", 300))
-    tau_t        = float(parameters.get("tauT", 0.1))
-    tc_groups    = str(parameters.get("tcGroups", "Protein Non-Protein"))
-    ref_t_line   = " ".join(str(temperature) for _ in tc_groups.split())
-    tau_t_line   = " ".join(str(tau_t) for _ in tc_groups.split())
-    barostat     = "no" if stage == "nvt" else str(parameters.get("barostat", "Parrinello-Rahman"))
-    pressure     = float(parameters.get("pressure", 1.0))
-    tau_p        = float(parameters.get("tauP", 2.0))
+    thermostat = str(parameters.get("thermostat", "V-rescale"))
+    temperature = float(parameters.get("temperature", 300))
+    tau_t = float(parameters.get("tauT", 0.1))
+    tc_groups = str(parameters.get("tcGroups", "Protein Non-Protein"))
+    ref_t_line = " ".join(str(temperature) for _ in tc_groups.split())
+    tau_t_line = " ".join(str(tau_t) for _ in tc_groups.split())
+    barostat = "no" if stage == "nvt" else str(parameters.get("barostat", "Parrinello-Rahman"))
+    pressure = float(parameters.get("pressure", 1.0))
+    tau_p = float(parameters.get("tauP", 2.0))
     compressibility = str(parameters.get("compressibility", "4.5e-5"))
-    pcoupltype   = str(parameters.get("pcoupltype", "isotropic"))
+    pcoupltype = str(parameters.get("pcoupltype", "isotropic"))
     define_posres = "-DPOSRES" if stage in {"nvt", "npt"} else ""
     continuation = "no" if stage == "nvt" else "yes"
-    gen_vel      = "yes" if stage == "nvt" else "no"
-    gen_seed     = int(parameters.get("genSeed", -1))
-    integrator   = str(parameters.get("integrator", "md"))
+    gen_vel = "yes" if stage == "nvt" else "no"
+    gen_seed = int(parameters.get("genSeed", -1))
+    integrator = str(parameters.get("integrator", "md"))
 
     lines = [
+        f"title                   = {job_name}",
         f"; created by GROWebby for {stage}",
         f"integrator              = {integrator}",
         f"dt                      = {dt}",
@@ -668,27 +764,38 @@ def make_mdp(parameters: dict[str, Any], stage: str) -> str:
 
 # ── Command builders ──────────────────────────────────────────────────────────
 
+
 def step_commands(step_key: str, parameters: dict[str, Any], job: SimulationJob) -> list[tuple[list[str], str | None]]:
     gmx = gmx_binary()
     if not gmx:
-        raise RuntimeError("GROMACS binary was not found. Rebuild the backend image or set GROMACS_BINARY to a valid gmx executable.")
+        raise RuntimeError(
+            "GROMACS binary was not found. Rebuild the backend image or set GROMACS_BINARY to a valid gmx executable."
+        )
 
-    input_name   = job.upload.original_name
-    force_field  = str(parameters.get("forceField", "amber99sb-ildn"))
-    water_model  = str(parameters.get("waterModel", "tip3p"))
+    input_name = job.upload.original_name
     gpu_requested = bool(parameters.get("useGpu"))
-    gpu_allowed  = gpu_execution_available()
+    gpu_allowed = gpu_execution_available()
     if gpu_requested and not gpu_allowed:
-        append_log(job, "GPU acceleration was requested, but the active GROMACS engine has no GPU support. Running this step on CPU.")
+        append_log(
+            job,
+            "GPU acceleration was requested, but the active GROMACS engine has no GPU support. Running this step on CPU.",
+        )
 
     # mdrun GPU flags
     gpu_args: list[str] = []
     if gpu_requested and gpu_allowed:
-        gpu_args = ["-nb", "gpu", "-bonded", str(parameters.get("gpuBonded", "cpu")), "-pme", str(parameters.get("gpuPme", "cpu"))]
+        gpu_args = [
+            "-nb",
+            "gpu",
+            "-bonded",
+            str(parameters.get("gpuBonded", "auto")),
+            "-pme",
+            str(parameters.get("gpuPme", "auto")),
+        ]
 
     # mdrun performance flags
-    ntomp   = int(parameters.get("ntomp", 0))
-    ntmpi   = int(parameters.get("ntmpi", 0))
+    ntomp = int(parameters.get("ntomp", 0))
+    ntmpi = int(parameters.get("ntmpi", 0))
     pinoffset = int(parameters.get("pinoffset", 0))
     perf_args = []
     if ntomp:
@@ -703,148 +810,90 @@ def step_commands(step_key: str, parameters: dict[str, Any], job: SimulationJob)
     # grompp maxwarn
     maxwarn = str(parameters.get("maxwarn", 1))
 
-    # pdb2gmx flags
-    pdb2gmx_args: list[str] = ["-ignh"]
-    if parameters.get("ter"):
-        pdb2gmx_args += ["-ter"]
-    if parameters.get("merge") == "all":
-        pdb2gmx_args += ["-merge", "all"]
-    elif parameters.get("merge") == "interactive":
-        pdb2gmx_args += ["-merge", "interactive"]
-    if parameters.get("renum"):
-        pdb2gmx_args += ["-renum"]
-    if parameters.get("heavyh"):
-        pdb2gmx_args += ["-heavyh"]
-    if parameters.get("chainsep"):
-        pdb2gmx_args += ["-chainsep", str(parameters["chainsep"])]
-    if parameters.get("his"):
-        pdb2gmx_args += ["-his", str(parameters["his"])]
-
-    # editconf flags
-    box_type = str(parameters.get("boxType", "dodecahedron"))
-    distance_nm = str(parameters.get("distanceNm", 1.0))
-    editconf_args = ["-bt", box_type, "-d", distance_nm, "-c"]
-    if parameters.get("boxX") and parameters.get("boxY") and parameters.get("boxZ"):
-        editconf_args += ["-box", str(parameters["boxX"]), str(parameters["boxY"]), str(parameters["boxZ"])]
-    if parameters.get("angles"):
-        a = parameters["angles"]
-        editconf_args += ["-angles", str(a[0]), str(a[1]), str(a[2])]
-    if parameters.get("translate"):
-        t = parameters["translate"]
-        editconf_args += ["-translate", str(t[0]), str(t[1]), str(t[2])]
-    if parameters.get("rotate"):
-        r = parameters["rotate"]
-        editconf_args += ["-rotate", str(r[0]), str(r[1]), str(r[2])]
-
-    # solvate flags
-    solvent_struct = str(parameters.get("solventStructure", "spc216.gro"))
-    solvent_scale  = str(parameters.get("solventScale", 0.57))
-    solvate_args   = ["-cs", solvent_struct, "-scale", solvent_scale]
-    if parameters.get("maxsolv"):
-        solvate_args += ["-maxsol", str(parameters["maxsolv"])]
-    if parameters.get("shell"):
-        solvate_args += ["-shell", str(parameters["shell"])]
-
-    # genion flags
-    pos_ion  = str(parameters.get("positiveIon", "NA"))
-    neg_ion  = str(parameters.get("negativeIon", "CL"))
-    salt_mol = str(parameters.get("saltMolar", 0.15))
-    genion_args = ["-pname", pos_ion, "-nname", neg_ion, "-conc", salt_mol, "-neutral"]
-    if parameters.get("npos"):
-        genion_args += ["-np", str(parameters["npos"]), "-nn", str(parameters.get("nneg", 0))]
-        genion_args = [a for a in genion_args if a != "-neutral"]  # -neutral conflicts with explicit counts
+    from .gmx.editconf import build_editconf_cmd
+    from .gmx.genion import build_genion_cmd
+    from .gmx.grompp import build_grompp_cmd
+    from .gmx.mdrun import build_mdrun_cmd
+    from .gmx.pdb2gmx import build_pdb2gmx_cmd
+    from .gmx.solvate import build_solvate_cmd
 
     commands: dict[str, list[tuple[list[str], str | None]]] = {
         "topology": [
-            ([gmx, "pdb2gmx",
-              "-f", input_name,
-              "-o", "outputs/processed.gro",
-              "-p", "topol.top",
-              "-i", "posre.itp",
-              "-ff", force_field,
-              "-water", water_model,
-              *pdb2gmx_args], None),
+            (build_pdb2gmx_cmd(gmx, input_name, "outputs/processed.gro", "topol.top", "posre.itp", parameters), None),
         ],
         "box": [
-            ([gmx, "editconf",
-              "-f", "outputs/processed.gro",
-              "-o", "outputs/boxed.gro",
-              *editconf_args], None),
+            (build_editconf_cmd(gmx, "outputs/processed.gro", "outputs/boxed.gro", parameters), None),
         ],
         "solvation": [
-            ([gmx, "solvate",
-              "-cp", "outputs/boxed.gro",
-              "-o", "outputs/solvated.gro",
-              "-p", "topol.top",
-              *solvate_args], None),
+            (build_solvate_cmd(gmx, "outputs/boxed.gro", "outputs/solvated.gro", "topol.top", parameters), None),
         ],
-        "ions": [
-            ([gmx, "grompp",
-              "-f", "ions.mdp",
-              "-c", "outputs/solvated.gro",
-              "-p", "topol.top",
-              "-o", "ions.tpr",
-              "-maxwarn", maxwarn], None),
-            ([gmx, "genion",
-              "-s", "ions.tpr",
-              "-o", "outputs/ionized.gro",
-              "-p", "topol.top",
-              *genion_args], "SOL\n"),
+        "ions_grompp": [
+            (build_grompp_cmd(gmx, "ions.mdp", "outputs/solvated.gro", "topol.top", "ions.tpr", parameters), None),
         ],
-        "minimize": [
-            ([gmx, "grompp",
-              "-f", "minim.mdp",
-              "-c", "outputs/ionized.gro",
-              "-p", "topol.top",
-              "-o", "minim.tpr",
-              "-maxwarn", maxwarn], None),
-            ([gmx, "mdrun",
-              "-v",
-              "-deffnm", "minim",
-              *gpu_args, *perf_args], None),
+        "ions_genion": [
+            (
+                build_genion_cmd(gmx, "ions.tpr", "outputs/ionized.gro", "topol.top", parameters),
+                f"{parameters.get('solventGroup', 'SOL')}\n",
+            ),
         ],
-        "nvt": [
-            ([gmx, "grompp",
-              "-f", "nvt.mdp",
-              "-c", "minim.gro",
-              "-r", "minim.gro",
-              "-p", "topol.top",
-              "-o", "nvt.tpr",
-              "-maxwarn", maxwarn], None),
-            ([gmx, "mdrun",
-              "-deffnm", "nvt",
-              *gpu_args, *perf_args], None),
+        "minimize_grompp": [
+            (build_grompp_cmd(gmx, "minim.mdp", "outputs/ionized.gro", "topol.top", "minim.tpr", parameters), None),
         ],
-        "npt": [
-            ([gmx, "grompp",
-              "-f", "npt.mdp",
-              "-c", "nvt.gro",
-              "-r", "nvt.gro",
-              "-t", "nvt.cpt",
-              "-p", "topol.top",
-              "-o", "npt.tpr",
-              "-maxwarn", maxwarn], None),
-            ([gmx, "mdrun",
-              "-deffnm", "npt",
-              *gpu_args, *perf_args], None),
+        "minimize_mdrun": [
+            (build_mdrun_cmd(gmx, "minim", parameters, gpu_args, perf_args, "minimize"), None),
         ],
-        "production": [
-            ([gmx, "grompp",
-              "-f", "production.mdp",
-              "-c", "npt.gro",
-              "-t", "npt.cpt",
-              "-p", "topol.top",
-              "-o", "production.tpr",
-              "-maxwarn", maxwarn], None),
-            ([gmx, "mdrun",
-              "-deffnm", "production",
-              *gpu_args, *perf_args], None),
+        "nvt_grompp": [
+            (
+                build_grompp_cmd(gmx, "nvt.mdp", "minim.gro", "topol.top", "nvt.tpr", parameters, ref_file="minim.gro"),
+                None,
+            ),
+        ],
+        "nvt_mdrun": [
+            (build_mdrun_cmd(gmx, "nvt", parameters, gpu_args, perf_args, "nvt"), None),
+        ],
+        "npt_grompp": [
+            (
+                build_grompp_cmd(
+                    gmx,
+                    "npt.mdp",
+                    "nvt.gro",
+                    "topol.top",
+                    "npt.tpr",
+                    parameters,
+                    ref_file="nvt.gro",
+                    cpt_file="nvt.cpt",
+                ),
+                None,
+            ),
+        ],
+        "npt_mdrun": [
+            (build_mdrun_cmd(gmx, "npt", parameters, gpu_args, perf_args, "npt"), None),
+        ],
+        "production_grompp": [
+            (
+                build_grompp_cmd(
+                    gmx,
+                    "production.mdp",
+                    "npt.gro",
+                    "topol.top",
+                    "production.tpr",
+                    parameters,
+                    ref_file="npt.gro",
+                    cpt_file="npt.cpt",
+                ),
+                None,
+            ),
+        ],
+        "production_mdrun": [
+            (build_mdrun_cmd(gmx, "production", parameters, gpu_args, perf_args, "production"), None),
         ],
     }
+
     return commands[step_key]
 
 
 # ── Pipeline helpers ──────────────────────────────────────────────────────────
+
 
 def step_index(step_key: str) -> int:
     return next((index for index, (key, _name, _progress) in enumerate(PIPELINE_STEPS) if key == step_key), -1)
@@ -863,12 +912,18 @@ def step_output_url(job: SimulationJob, step_key: str) -> str:
 
 def latest_completed_job_with_step(upload, step_key: str, owner=None) -> SimulationJob | None:
     expected_name = STEP_OUTPUTS[step_key].split("/")[-1]
-    queryset = SimulationJob.objects.filter(upload=upload, status=SimulationJob.Status.COMPLETED).order_by("-finished_at", "-created_at")
+    queryset = SimulationJob.objects.filter(upload=upload, status=SimulationJob.Status.COMPLETED).order_by(
+        "-finished_at", "-created_at"
+    )
     if owner is not None:
         queryset = queryset.filter(owner=owner)
     for job in queryset:
         for artifact in job.parameters.get("artifactFiles", []):
-            if isinstance(artifact, dict) and artifact.get("name") == expected_name and artifact.get("kind") == "structure":
+            if (
+                isinstance(artifact, dict)
+                and artifact.get("name") == expected_name
+                and artifact.get("kind") == "structure"
+            ):
                 return job
     return None
 
@@ -877,20 +932,29 @@ def completed_step_available(upload, step_key: str, owner=None) -> bool:
     return latest_completed_job_with_step(upload, step_key, owner) is not None
 
 
-def import_previous_step_workspace(job: SimulationJob, step_key: str) -> None:
+def import_previous_step_workspace(job: SimulationJob, step_key: str) -> list[dict[str, str]]:
     previous = previous_step_key(step_key)
     if previous is None:
-        return
+        return []
     owner = None if job.owner and job.owner.is_staff else job.owner
     source_job = latest_completed_job_with_step(job.upload, previous, owner)
     if source_job is None or not source_job.workspace_slug:
-        return
+        return []
     source = settings.MEDIA_ROOT / "workspaces" / user_dir_for_job(source_job) / source_job.workspace_slug
     target = run_workspace(job)
     if not source.exists() or source.resolve() == target.resolve():
-        return
+        return []
     shutil.copytree(source, target, dirs_exist_ok=True)
     append_log(job, f"Imported files from previous step run #{source_job.id} ({previous.upper()}) before continuing.")
+
+    inherited_artifacts = []
+    for artifact in source_job.parameters.get("artifactFiles", []):
+        if isinstance(artifact, dict) and "url" in artifact and "name" in artifact and "path" in artifact:
+            # Create a shallow copy and rewrite URL to point to current workspace since we copied physical files
+            new_artifact = artifact.copy()
+            new_artifact["url"] = workspace_media_url(job, artifact["path"])
+            inherited_artifacts.append(new_artifact)
+    return inherited_artifacts
 
 
 def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[dict[str, str]]:
@@ -901,29 +965,52 @@ def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[di
     input_target = workspace / job.upload.original_name
     try:
         shutil.copyfile(job.upload.file.path, input_target)
-        artifacts.append({
-            "name": job.upload.original_name,
-            "kind": "input",
-            "path": job.upload.original_name,
-            "url": workspace_media_url(job, job.upload.original_name),
-        })
+
+        # If starting from an intermediate step, ensure the expected input file exists
+        start_step = parameters.get("startStep", "topology")
+        expected_inputs = {
+            "box": "outputs/processed.gro",
+            "solvation": "outputs/boxed.gro",
+            "ions": "outputs/solvated.gro",
+            "minimize": "outputs/ionized.gro",
+            "nvt": "outputs/minimized.gro",
+            "npt": "outputs/nvt.gro",
+            "production": "outputs/npt.gro",
+        }
+        if start_step in expected_inputs:
+            expected_path = workspace / expected_inputs[start_step]
+            if not expected_path.exists():
+                expected_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(input_target, expected_path)
+
+        artifacts.append(
+            {
+                "name": job.upload.original_name,
+                "kind": "input",
+                "path": job.upload.original_name,
+                "url": workspace_media_url(job, job.upload.original_name),
+            }
+        )
     except Exception as exc:
         append_log(job, f"Could not copy input into workspace: {exc}")
 
     for name, content in {
-        "ions.mdp":        make_mdp(parameters, "ions"),
-        "minim.mdp":       make_mdp(parameters, "minim"),
-        "nvt.mdp":         make_mdp(parameters, "nvt"),
-        "npt.mdp":         make_mdp(parameters, "npt"),
-        "production.mdp":  make_mdp(parameters, "production"),
+        "ions.mdp": make_mdp(job.name, parameters, "ions"),
+        "minim.mdp": make_mdp(job.name, parameters, "minim"),
+        "nvt.mdp": make_mdp(job.name, parameters, "nvt"),
+        "npt.mdp": make_mdp(job.name, parameters, "npt"),
+        "production.mdp": make_mdp(job.name, parameters, "production"),
         "workflow-preview.txt": str(parameters.get("generatedConfig", "")).strip(),
-        "run-manifest.json": json.dumps({
-            "job": job.id,
-            "owner": job.owner.get_username() if job.owner else None,
-            "mode": parameters.get("executionMode", "gromacs"),
-            "input": job.upload.original_name,
-            "parameters": parameters,
-        }, indent=2),
+        "run-manifest.json": json.dumps(
+            {
+                "job": job.id,
+                "owner": job.owner.get_username() if job.owner else None,
+                "mode": parameters.get("executionMode", "gromacs"),
+                "input": job.upload.original_name,
+                "parameters": parameters,
+            },
+            indent=2,
+        ),
     }.items():
         url = write_artifact(job, name, content)
         artifacts.append({"name": name, "kind": "config", "path": name, "url": url})
@@ -931,6 +1018,7 @@ def persist_run_files(job: SimulationJob, parameters: dict[str, Any]) -> list[di
 
 
 # ── Main runner ───────────────────────────────────────────────────────────────
+
 
 def run_simulation(job_id: int) -> None:
     close_old_connections()
@@ -952,11 +1040,16 @@ def run_simulation(job_id: int) -> None:
         elif allow_validation:
             mode = "validation-mode"
         else:
-            raise RuntimeError("No GROMACS executable is available. Rebuild the backend container or set GROMACS_BINARY before starting a run.")
+            raise RuntimeError(
+                "No GROMACS executable is available. Rebuild the backend container or set GROMACS_BINARY before starting a run."
+            )
         use_validation = mode == "validation-mode"
         append_log(job, f"GROMACS run started. Engine: {mode}.")
         if mode == "validation-mode":
-            append_log(job, "Validation mode is active. The workflow uses synthetic progress data and does not execute gmx mdrun.")
+            append_log(
+                job,
+                "Validation mode is active. The workflow uses synthetic progress data and does not execute gmx mdrun.",
+            )
         elif gmx:
             append_log(job, f"GROMACS binary: {gmx}.")
         append_log(job, f"Input coordinate file: {job.upload.original_name}")
@@ -964,22 +1057,25 @@ def run_simulation(job_id: int) -> None:
         parameters: dict[str, Any] = job.parameters
         parameters["executionMode"] = mode
         start_step = str(parameters.get("startStep", "topology"))
-        run_until  = str(parameters.get("runUntil", "production"))
+        run_until = str(parameters.get("runUntil", "production"))
         generated_config = str(parameters.get("generatedConfig", "")).strip()
         if start_step == "equilibrate":
             start_step = "nvt"
         if run_until == "equilibrate":
             run_until = "npt"
+        inherited_artifacts = []
         if not use_validation:
-            import_previous_step_workspace(job, start_step)
+            inherited_artifacts = import_previous_step_workspace(job, start_step)
         artifacts = persist_run_files(job, parameters)
-        parameters["artifactFiles"] = artifacts
+        parameters["artifactFiles"] = inherited_artifacts + artifacts
         job.parameters = parameters
         job.save(update_fields=["parameters", "updated_at"])
         append_log(job, f"Run workspace prepared with {len(artifacts)} stored files.")
         if generated_config:
             append_log(job, "Configuration snapshot saved with run parameters.")
-        start_index = next((index for index, (step_key, _name, _progress) in enumerate(PIPELINE_STEPS) if step_key == start_step), 0)
+        start_index = next(
+            (index for index, (step_key, _name, _progress) in enumerate(PIPELINE_STEPS) if step_key == start_step), 0
+        )
         for skipped_key, skipped_name, skipped_progress in PIPELINE_STEPS[:start_index]:
             job.progress = max(job.progress, skipped_progress)
             job.current_step = f"Skipped: {skipped_name}"
@@ -989,7 +1085,9 @@ def run_simulation(job_id: int) -> None:
 
         completed_step_key = "production"
         completed_step_name = "Production MD"
-        for index, (step_key, step_name, target_progress) in enumerate(PIPELINE_STEPS[start_index:], start=start_index + 1):
+        for index, (step_key, step_name, target_progress) in enumerate(
+            PIPELINE_STEPS[start_index:], start=start_index + 1
+        ):
             check_cancelled(job)
             completed_step_key = step_key
             completed_step_name = step_name
@@ -1003,8 +1101,8 @@ def run_simulation(job_id: int) -> None:
                 for progress in range(previous_progress + 1, target_progress + 1):
                     check_cancelled(job)
                     temperature = float(parameters.get("temperature", 300))
-                    pressure    = float(parameters.get("pressure", 1))
-                    density_target = 998 if step_key in {"npt", "production"} else 940
+                    pressure = float(parameters.get("pressure", 1))
+                    density_target = 998 if step_key in {"npt_mdrun", "production_mdrun"} else 940
                     energy = -1200 + math.sin(progress / 8) * 80 - progress * 2 + random.uniform(-8, 8)
                     metric = {
                         "stage": step_key,
@@ -1025,7 +1123,16 @@ def run_simulation(job_id: int) -> None:
                 base_metrics = list(metrics)
                 for command, stdin in step_commands(step_key, parameters, job):
                     if "mdrun" in command:
-                        stage_metrics = run_mdrun_with_live_metrics(job, command, workspace, step_key, target_progress, previous_progress, base_metrics, parameters)
+                        stage_metrics = run_mdrun_with_live_metrics(
+                            job,
+                            command,
+                            workspace,
+                            step_key,
+                            target_progress,
+                            previous_progress,
+                            base_metrics,
+                            parameters,
+                        )
                     else:
                         run_command(job, command, workspace, stdin=stdin, step_key=step_key)
                 if not stage_metrics:
@@ -1049,21 +1156,30 @@ def run_simulation(job_id: int) -> None:
                 output_url = write_artifact(job, STEP_OUTPUTS[step_key], f"Validation structure for {step_name}\n")
             else:
                 if not output_path.exists():
-                    raise RuntimeError(f"{step_name} finished but expected output was not created: {STEP_OUTPUTS[step_key]}")
+                    raise RuntimeError(
+                        f"{step_name} finished but expected output was not created: {STEP_OUTPUTS[step_key]}"
+                    )
                 output_url = step_output_url(job, step_key)
             artifacts = [
                 *parameters.get("artifactFiles", []),
-                {"name": f"{step_key}-metrics.csv", "kind": "analysis", "path": f"analysis/{step_key}-metrics.csv", "url": url},
+                {
+                    "name": f"{step_key}-metrics.csv",
+                    "kind": "analysis",
+                    "path": f"analysis/{step_key}-metrics.csv",
+                    "url": url,
+                },
                 {"name": output_name, "kind": "structure", "path": STEP_OUTPUTS[step_key], "url": output_url},
             ]
             energy_xvg = run_workspace(job) / "analysis" / f"{step_key}-gromacs-energy.xvg"
             if energy_xvg.exists():
-                artifacts.append({
-                    "name": f"{step_key}-gromacs-energy.xvg",
-                    "kind": "analysis",
-                    "path": f"analysis/{step_key}-gromacs-energy.xvg",
-                    "url": workspace_media_url(job, f"analysis/{step_key}-gromacs-energy.xvg"),
-                })
+                artifacts.append(
+                    {
+                        "name": f"{step_key}-gromacs-energy.xvg",
+                        "kind": "analysis",
+                        "path": f"analysis/{step_key}-gromacs-energy.xvg",
+                        "url": workspace_media_url(job, f"analysis/{step_key}-gromacs-energy.xvg"),
+                    }
+                )
             parameters["artifactFiles"] = artifacts
             job.parameters = parameters
             job.save(update_fields=["parameters", "updated_at"])
@@ -1078,6 +1194,17 @@ def run_simulation(job_id: int) -> None:
         job.process_pid = None
         job.save(update_fields=["status", "current_step", "process_pid", "finished_at", "updated_at"])
         append_log(job, "Simulation pipeline completed successfully.")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Completed",
+                    message=f"Your simulation '{job.name}' has finished successfully.\n\nLog in to download your results.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     except SimulationCancelled as exc:
         job.status = SimulationJob.Status.CANCELLED
         job.error = str(exc)
@@ -1086,6 +1213,17 @@ def run_simulation(job_id: int) -> None:
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "error", "current_step", "process_pid", "finished_at", "updated_at"])
         append_log(job, "Run cancelled. Active GROMACS process was terminated.")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Cancelled",
+                    message=f"Your simulation '{job.name}' has been cancelled.\n\nReason: {exc}",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     except Exception as exc:
         job.status = SimulationJob.Status.FAILED
         job.error = str(exc)
@@ -1093,5 +1231,140 @@ def run_simulation(job_id: int) -> None:
         job.finished_at = timezone.now()
         job.save(update_fields=["status", "error", "process_pid", "finished_at", "updated_at"])
         append_log(job, f"Simulation failed: {exc}")
+        if job.owner and job.owner.email:
+            try:
+                send_mail(
+                    subject=f"GROWebby: Simulation '{job.name}' Failed",
+                    message=f"Your simulation '{job.name}' failed to complete.\n\nError: {exc}",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[job.owner.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
     finally:
+        try:
+            fix_workspace_permissions(run_workspace(job))
+        except Exception:
+            pass
         close_old_connections()
+
+
+def run_analysis(job_id: int, tool_name: str, step_source: str = "production") -> dict[str, Any]:
+    job = SimulationJob.objects.get(pk=job_id)
+    workspace = run_workspace(job)
+    gmx = gmx_binary()
+    if not gmx:
+        raise RuntimeError("GROMACS binary not found.")
+
+    tpr = workspace / f"{step_source}.tpr"
+    xtc = workspace / f"{step_source}.xtc"
+    if not tpr.exists():
+        raise RuntimeError(f"Missing input file: {tpr.name}")
+
+    if not xtc.exists():
+        xtc = workspace / f"{step_source}.trr"
+        if not xtc.exists():
+            xtc = workspace / f"{step_source}.gro"
+
+    analysis_dir = workspace / "analysis"
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = int(time.time())
+    output_name = f"{step_source}-{tool_name}-{timestamp}.xvg"
+    output_xvg = analysis_dir / output_name
+
+    command = []
+    stdin_input = ""
+
+    if tool_name == "rmsd":
+        command = [gmx, "rms", "-s", str(tpr), "-f", str(xtc), "-o", str(output_xvg)]
+        stdin_input = "4\n4\n"  # Backbone, Backbone
+    elif tool_name == "rmsf":
+        command = [gmx, "rmsf", "-s", str(tpr), "-f", str(xtc), "-o", str(output_xvg), "-res"]
+        stdin_input = "3\n"  # C-alpha
+    elif tool_name == "gyrate":
+        command = [gmx, "gyrate", "-s", str(tpr), "-f", str(xtc), "-o", str(output_xvg)]
+        stdin_input = "1\n"  # Protein
+    elif tool_name == "sasa":
+        command = [gmx, "sasa", "-s", str(tpr), "-f", str(xtc), "-o", str(output_xvg)]
+        stdin_input = "1\n"  # Protein
+    elif tool_name == "hbond":
+        command = [gmx, "hbond", "-s", str(tpr), "-f", str(xtc), "-num", str(output_xvg)]
+        stdin_input = "1\n1\n"  # Protein, Protein
+    else:
+        raise ValueError(f"Unknown analysis tool: {tool_name}")
+
+    append_log(job, f"Running analysis '{tool_name}' on {step_source} output...")
+
+    try:
+        result = subprocess.run(
+            command,
+            cwd=workspace,
+            input=stdin_input,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"Analysis '{tool_name}' timed out after 120 seconds.")
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Analysis '{tool_name}' failed: {result.stdout}")
+
+    legends: list[str] = []
+    data: list[list[float]] = []
+    x_label = "X"
+    y_label = "Y"
+    if output_xvg.exists():
+        with output_xvg.open("r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                s = line.strip()
+                if not s:
+                    continue
+                if s.startswith("@"):
+                    if "xaxis  label" in s:
+                        x_label = s.split('"')[1]
+                    elif "yaxis  label" in s:
+                        y_label = s.split('"')[1]
+                    elif 'legend "' in s:
+                        legends.append(s.split('"')[1])
+                    continue
+                if s.startswith("#"):
+                    continue
+                values = []
+                for v in s.split():
+                    try:
+                        values.append(float(v))
+                    except ValueError:
+                        pass
+                if values:
+                    data.append(values)
+
+    url = workspace_media_url(job, f"analysis/{output_name}")
+    artifact = {
+        "name": f"{tool_name.upper()} ({step_source})",
+        "kind": "analysis_plot",
+        "path": f"analysis/{output_name}",
+        "url": url,
+    }
+
+    params = job.parameters
+    artifacts = params.get("artifactFiles", [])
+    artifacts.append(artifact)
+    params["artifactFiles"] = artifacts
+    job.parameters = params
+    job.save(update_fields=["parameters", "updated_at"])
+
+    append_log(job, f"Analysis '{tool_name}' completed. Wrote {len(data)} data points.")
+
+    return {
+        "tool": tool_name,
+        "x_label": x_label,
+        "y_label": y_label,
+        "legends": legends,
+        "data": data,
+        "artifact": artifact,
+    }

@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0]
+
+### Added
+- **In-App PDB Editor**: Full-screen Monaco-powered editor to manually review and fix crystal structures prior to simulation.
+- **Advanced GROMACS Parameters**: Support for custom command-line toggles (e.g., `-missing`) and dynamic parameter exposure via backend APIs.
+- **Extended Force Fields**: Auto-installation of modern topologies including `charmm36`, `amber03ws`, and `amber14sb_OL15`.
+- **Native User Management**: Built-in Admin dashboard with CRUD operations, role assignments, and email notifications for approvals and workflow events.
+- **Enhanced Export Capabilities**: Dynamic SVG exports that correctly bind user-defined plot titles, styled backgrounds, and properly-centered axis labels.
+- **New Branding**: Isometric simulation box SVG logo natively integrated into the UI and favicon.
+
+### Changed
+- **Modular Pipeline**: Completely refactored the Python execution backend (`runner.py` to `simulations/gmx/*`) to handle robust, parameter-rich GROMACS commands.
+- **Dynamic Workflows**: Simulation options (force fields, water models) are now populated dynamically directly from the underlying engine context.
+- **Two-Tier Docker Architecture**: Decoupled environment tools (CUDA, OpenCL, Node) into pre-built base images, slashing local build and deployment times to mere seconds.
+- **Thorough Code Cleanup**: Removed redundant variables, fixed implicit typing errors in the frontend, and scrubbed development artifacts for a production-ready codebase.
+
+### Fixed
+- Stabilized deployment scripts (`start.sh`) preventing UI browser crashes and addressing Docker compose timeouts on headless servers.
+- Corrected numerous backend container crashes caused by path resolution and python binary variations on Ubuntu base images.
+- Re-architected CUDA base images using 12.0.1 for significantly broader host GPU driver compatibility.
+- Fixed axis label overflows and chart cutoff issues in the Analysis and Workflow UI plots.
+
 ## [1.0.0]
+
 
 ### Added
 
@@ -51,4 +74,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Documentation
 - `README.md` with quick start, badges, and architecture overview
 - `CHANGELOG.md` (this file)
-

@@ -6,28 +6,7 @@ Contributions should prioritise correctness, traceability, scientific reproducib
 
 ---
 
-## Table of Contents
 
-- [Maintainer](#maintainer)
-- [Code of Conduct](#code-of-conduct)
-- [Development Principles](#development-principles)
-- [Project Structure](#project-structure)
-- [Local Development Setup](#local-development-setup)
-- [Running the Application](#running-the-application)
-- [Backend Development (Django)](#backend-development-django)
-- [Frontend Development (React)](#frontend-development-react)
-- [GROMACS Engine Development](#gromacs-engine-development)
-- [Testing](#testing)
-- [Coding Standards](#coding-standards)
-- [Commit Messages](#commit-messages)
-- [Pull Request Guidelines](#pull-request-guidelines)
-- [Storage and Workspace Conventions](#storage-and-workspace-conventions)
-- [Adding a Force Field or Water Model](#adding-a-force-field-or-water-model)
-- [Adding a New API Endpoint](#adding-a-new-api-endpoint)
-- [Documentation](#documentation)
-- [License](#license)
-
----
 
 ## Maintainer
 

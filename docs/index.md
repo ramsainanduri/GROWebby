@@ -8,7 +8,7 @@ This folder contains the operating and user documentation for GROWebby.
 - [Simulation Workflow Reference](simulation-workflow.md): what each MD step does, what files it expects, and what it produces.
 - [Administration and Access Control](administration.md): accounts, approvals, groups, and admin operations.
 - [Architecture](architecture.md): application services, data flow, execution engines, and storage layout.
-- [Operations and Troubleshooting](operations.md): startup, health checks, GPU modes, logs, and common failures.
+- [Operations and Diagnostics](operations.md): startup, health checks, GPU modes, logs, and common failures.
 - [Contributing](../CONTRIBUTING.md): development standards, checks, and pull request guidance.
 
 ### Working with the Documentation

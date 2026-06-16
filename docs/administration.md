@@ -12,20 +12,13 @@ GROWebby uses Django session authentication and local user accounts. It is desig
 
 ## Creating the First Admin
 
-Create the first admin from the project root after services are running:
+The startup scripts automatically create a default superuser account on the first launch so you can log in immediately.
 
-```bash
-docker compose exec backend python manage.py ensure_admin \
-  --username admin \
-  --email admin@example.com \
-  --password "change-this-password"
-```
+- **Username:** `admin`
+- **Email:** `admin@growebby.local`
+- **Password:** `admin`
 
-Requirements:
-
-- Password must be at least 8 characters.
-- If the username already exists, the command exits with an error.
-- The command does not overwrite an existing user.
+Please sign in and change the admin password immediately in any shared or production environment.
 
 You can also use Django's interactive command:
 
@@ -77,9 +70,15 @@ Uploads and runs have an owner. Regular users can see:
 
 Staff users can see all uploads and runs.
 
-## Groups
+## Groups and Permissions
 
-Groups provide a path for team or lab visibility. Assign users and records to Django groups when a project should be shared by a defined set of users.
+Groups provide a path for team or lab visibility. While GROWebby's custom web UI provides basic hooks and views for group management, **full group creation and fine-grained permission assignments must be managed via the Django Admin interface**.
+
+To configure what each group is allowed to do:
+1. Navigate to the Django Admin interface (`http://localhost:8000/admin/`).
+2. Go to **Authentication and Authorization > Groups**.
+3. Create new groups (e.g., "Researchers", "Students") and use the interface to assign specific model permissions (add, change, delete) to control exactly what the group is allowed to do across the complete package.
+4. Add users to these groups.
 
 Recommended group practices:
 

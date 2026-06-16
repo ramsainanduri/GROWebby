@@ -179,7 +179,7 @@ Converts the uploaded coordinate file into a GROMACS processed structure and top
 - `topol.top` — topology (includes force field, atom types, bonds, angles, dihedrals)
 - `posre.itp` — position restraint include for equilibration
 
-### Troubleshooting
+### Diagnostics
 
 - **Unsupported residues**: use `gmx pdb2gmx -ff amber99sb-ildn -h` to list supported residues; use AmberTools or CHARMM-GUI for ligands.
 - **Missing atoms**: use `gmx pdb2gmx -ignh` (default) to let GROMACS add hydrogens.

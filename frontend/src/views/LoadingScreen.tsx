@@ -8,9 +8,7 @@ export function LoadingScreen({ dark, setDark }: { dark: boolean; setDark: (dark
         <ThemeToggle dark={dark} onToggle={() => setDark(!dark)} />
       </div>
       <div className="text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-ocean-600 dark:text-ocean-400">
-          <Atom size={30} />
-        </div>
+        <img src="/logo.svg" alt="GROWebby Logo" className="mx-auto mb-4 h-12 w-12 animate-pulse object-contain" />
         <div className="text-lg font-semibold">Opening GROWebby</div>
         <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Checking your session</div>
       </div>

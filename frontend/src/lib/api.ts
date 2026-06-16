@@ -80,6 +80,12 @@ export type AdminUser = {
   isSuperuser: boolean;
   dateJoined: string;
   purpose: string;
+  groups: string[];
+};
+
+export type AdminGroup = {
+  id: number;
+  name: string;
 };
 
 export type HealthState = {
@@ -94,15 +100,32 @@ export type HealthState = {
   };
 };
 
+export type GromacsOptions = {
+  forceFields: { value: string; label: string }[];
+  waterModels: { value: string; label: string }[];
+  boxTypes: { value: string; label: string }[];
+  minimizers: { value: string; label: string }[];
+  thermostats: { value: string; label: string }[];
+  barostats: { value: string; label: string }[];
+  constraints: { value: string; label: string }[];
+  integrators: { value: string; label: string }[];
+  coulombTypes: { value: string; label: string }[];
+  vdwTypes: { value: string; label: string }[];
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export async function parseResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
-  const data = contentType.includes("application/json") ? await response.json() : { error: await response.text() };
+  const data = contentType.includes("application/json")
+    ? await response.json()
+    : { error: await response.text() };
   if (!response.ok) {
-    const message = typeof data.error === "string" && data.error.trim().startsWith("<!DOCTYPE")
-      ? "The server rejected the request. Refresh the page and try again."
-      : data.error;
+    const message =
+      typeof data.error === "string" &&
+      data.error.trim().startsWith("<!DOCTYPE")
+        ? "The server rejected the request. Refresh the page and try again."
+        : data.error;
     throw new Error(message ?? "Request failed");
   }
   return data as T;
@@ -112,11 +135,19 @@ export async function getHealth(): Promise<HealthState> {
   return parseResponse<HealthState>(await fetch(`${API_BASE}/health/`));
 }
 
+export async function getGromacsOptions(): Promise<GromacsOptions> {
+  return parseResponse<GromacsOptions>(
+    await fetch(`${API_BASE}/gromacs-options/`),
+  );
+}
+
 function csrfToken(): string {
-  return document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("csrftoken="))
-    ?.split("=")[1] ?? "";
+  return (
+    document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("csrftoken="))
+      ?.split("=")[1] ?? ""
+  );
 }
 
 async function apiFetch(path: string, init: RequestInit = {}) {
@@ -128,7 +159,7 @@ async function apiFetch(path: string, init: RequestInit = {}) {
   return fetch(`${API_BASE}${path}`, {
     credentials: "include",
     ...init,
-    headers
+    headers,
   });
 }
 
@@ -137,20 +168,28 @@ export async function getSession(): Promise<SessionState> {
   return parseResponse<SessionState>(response);
 }
 
-export async function loginUser(username: string, password: string): Promise<SessionState> {
+export async function loginUser(
+  username: string,
+  password: string,
+): Promise<SessionState> {
   const response = await apiFetch("/auth/login/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password }),
   });
   return parseResponse<SessionState>(response);
 }
 
-export async function registerUser(username: string, email: string, password: string, purpose: string): Promise<{ registered: boolean; message: string }> {
+export async function registerUser(
+  username: string,
+  email: string,
+  password: string,
+  purpose: string,
+): Promise<{ registered: boolean; message: string }> {
   const response = await apiFetch("/auth/register/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, email, password, purpose })
+    body: JSON.stringify({ username, email, password, purpose }),
   });
   return parseResponse<{ registered: boolean; message: string }>(response);
 }
@@ -160,12 +199,14 @@ export async function logoutUser(): Promise<SessionState> {
   return parseResponse<SessionState>(response);
 }
 
-export async function uploadCoordinate(file: File): Promise<UploadedCoordinate> {
+export async function uploadCoordinate(
+  file: File,
+): Promise<UploadedCoordinate> {
   const form = new FormData();
   form.append("file", file);
   const response = await apiFetch("/uploads/coordinate/", {
     method: "POST",
-    body: form
+    body: form,
   });
   return parseResponse<UploadedCoordinate>(response);
 }
@@ -176,11 +217,15 @@ export async function listUploads(): Promise<UploadedCoordinate[]> {
   return data.results;
 }
 
-export async function createSimulation(uploadId: number, parameters: Record<string, unknown>, name?: string): Promise<SimulationJob> {
+export async function createSimulation(
+  uploadId: number,
+  parameters: Record<string, unknown>,
+  name?: string,
+): Promise<SimulationJob> {
   const response = await apiFetch("/simulations/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uploadId, parameters, name })
+    body: JSON.stringify({ uploadId, parameters, name }),
   });
   return parseResponse<SimulationJob>(response);
 }
@@ -196,50 +241,100 @@ export async function getSimulation(jobId: number): Promise<SimulationJob> {
   return parseResponse<SimulationJob>(response);
 }
 
-export async function deleteSimulation(jobId: number): Promise<{ deleted: boolean }> {
-  const response = await apiFetch(`/simulations/${jobId}/`, { method: "DELETE" });
+export async function deleteSimulation(
+  jobId: number,
+): Promise<{ deleted: boolean }> {
+  const response = await apiFetch(`/simulations/${jobId}/`, {
+    method: "DELETE",
+  });
   return parseResponse<{ deleted: boolean }>(response);
 }
 
 export async function cancelSimulation(jobId: number): Promise<SimulationJob> {
-  const response = await apiFetch(`/simulations/${jobId}/cancel/`, { method: "POST" });
-  return parseResponse<SimulationJob>(response);
-}
-
-export async function renameSimulation(jobId: number, name: string): Promise<SimulationJob> {
-  const response = await apiFetch(`/simulations/${jobId}/`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name })
+  const response = await apiFetch(`/simulations/${jobId}/cancel/`, {
+    method: "POST",
   });
   return parseResponse<SimulationJob>(response);
 }
 
-export async function createExampleSetup(exampleKey: "lysozyme" | "small-molecule"): Promise<{ upload: UploadedCoordinate; parameters: Record<string, unknown> }> {
-  const response = await apiFetch(`/examples/${exampleKey}/`, { method: "POST" });
-  return parseResponse<{ upload: UploadedCoordinate; parameters: Record<string, unknown> }>(response);
+export async function renameSimulation(
+  jobId: number,
+  name: string,
+): Promise<SimulationJob> {
+  const response = await apiFetch(`/simulations/${jobId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parseResponse<SimulationJob>(response);
 }
 
-export async function getSimulationLogs(jobId: number): Promise<SimulationLogEntry[]> {
+export type AnalysisResult = {
+  tool: string;
+  x_label: string;
+  y_label: string;
+  legends: string[];
+  data: number[][];
+  artifact: ArtifactFile;
+};
+
+export async function analyzeSimulation(
+  jobId: number,
+  tool: string,
+  stepSource: string = "production",
+): Promise<AnalysisResult> {
+  const response = await apiFetch(`/simulations/${jobId}/analyze/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tool, step_source: stepSource }),
+  });
+  return parseResponse<AnalysisResult>(response);
+}
+
+export async function createExampleSetup(
+  exampleKey: "lysozyme" | "small-molecule",
+): Promise<{
+  upload: UploadedCoordinate;
+  parameters: Record<string, unknown>;
+}> {
+  const response = await apiFetch(`/examples/${exampleKey}/`, {
+    method: "POST",
+  });
+  return parseResponse<{
+    upload: UploadedCoordinate;
+    parameters: Record<string, unknown>;
+  }>(response);
+}
+
+export async function getSimulationLogs(
+  jobId: number,
+): Promise<SimulationLogEntry[]> {
   const response = await apiFetch(`/simulations/${jobId}/logs/history/`);
   const data = await parseResponse<{ results: SimulationLogEntry[] }>(response);
   return data.results;
 }
 
-export async function readArtifact(jobId: number, artifact: ArtifactFile): Promise<{ content: string; artifact: ArtifactFile }> {
+export async function readArtifact(
+  jobId: number,
+  artifact: ArtifactFile,
+): Promise<{ content: string; artifact: ArtifactFile }> {
   const response = await apiFetch(`/simulations/${jobId}/artifacts/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ artifact })
+    body: JSON.stringify({ artifact }),
   });
   return parseResponse<{ content: string; artifact: ArtifactFile }>(response);
 }
 
-export async function saveArtifact(jobId: number, artifact: ArtifactFile, content: string): Promise<{ saved: boolean; artifact: ArtifactFile }> {
+export async function saveArtifact(
+  jobId: number,
+  artifact: ArtifactFile,
+  content: string,
+): Promise<{ saved: boolean; artifact: ArtifactFile }> {
   const response = await apiFetch(`/simulations/${jobId}/artifacts/`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ artifact, content })
+    body: JSON.stringify({ artifact, content }),
   });
   return parseResponse<{ saved: boolean; artifact: ArtifactFile }>(response);
 }
@@ -260,12 +355,102 @@ export async function adminListUsers(): Promise<AdminUser[]> {
   return data.users;
 }
 
-export async function adminApproveUser(userId: number): Promise<{ id: number; isActive: boolean }> {
-  const response = await apiFetch(`/auth/admin/users/${userId}/approve/`, { method: "POST" });
+export async function adminApproveUser(
+  userId: number,
+): Promise<{ id: number; isActive: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/approve/`, {
+    method: "POST",
+  });
   return parseResponse(response);
 }
 
-export async function adminDenyUser(userId: number): Promise<{ deleted: boolean }> {
-  const response = await apiFetch(`/auth/admin/users/${userId}/deny/`, { method: "POST" });
+export async function adminDeleteUser(
+  userId: number,
+): Promise<{ deleted: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/delete/`, {
+    method: "POST",
+  });
   return parseResponse(response);
+}
+
+export async function adminCreateUser(
+  data: any,
+): Promise<{ id: number; created: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/create/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return parseResponse(response);
+}
+
+export async function adminUpdateUser(
+  userId: number,
+  data: any,
+): Promise<{ id: number; updated: boolean }> {
+  const response = await apiFetch(`/auth/admin/users/${userId}/update/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return parseResponse(response);
+}
+
+export async function adminResetUserPassword(
+  userId: number,
+  data: any,
+): Promise<{ id: number; passwordReset: boolean }> {
+  const response = await apiFetch(
+    `/auth/admin/users/${userId}/reset-password/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  return parseResponse(response);
+}
+
+export async function adminListGroups(): Promise<AdminGroup[]> {
+  const response = await apiFetch("/auth/admin/groups/");
+  const data = await parseResponse<{ groups: AdminGroup[] }>(response);
+  return data.groups;
+}
+
+export async function adminCreateGroup(
+  name: string,
+): Promise<AdminGroup & { created: boolean }> {
+  const response = await apiFetch("/auth/admin/groups/create/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parseResponse(response);
+}
+
+export async function adminUpdateGroup(
+  groupId: number,
+  name: string,
+): Promise<AdminGroup & { updated: boolean }> {
+  const response = await apiFetch(`/auth/admin/groups/${groupId}/update/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return parseResponse(response);
+}
+
+export async function adminDeleteGroup(
+  groupId: number,
+): Promise<{ deleted: boolean }> {
+  const response = await apiFetch(`/auth/admin/groups/${groupId}/delete/`, {
+    method: "POST",
+  });
+  return parseResponse(response);
+}
+
+export async function adminListAllSimulations(): Promise<SimulationJob[]> {
+  const response = await apiFetch("/simulations/admin/all/");
+  const data = await parseResponse<{ results: SimulationJob[] }>(response);
+  return data.results;
 }

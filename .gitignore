@@ -173,3 +173,4 @@ frontend/screenshot.cjs
 # Local generated data
 backend/media/uploads/
 backend/media/workspaces/
+docker/base-frontend/package-lock.json

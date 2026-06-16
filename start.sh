@@ -65,7 +65,27 @@ if [[ "${GROWEBBY_ENGINE:-}" == "mac-opencl-native" ]]; then
     echo $! > ../.app_state/backend.pid
   )
 else
-  docker compose up --build -d
+  # Pull the base image from Docker Hub so engine + backend containers reuse it.
+  # BACKEND_BASE_IMAGE is set in .env by install.sh (e.g. growebby-base-backend-cuda).
+  # If the pull fails or times out, docker compose will build locally as fallback.
+  if [[ -n "${BACKEND_BASE_IMAGE:-}" ]]; then
+    echo "Pulling base image from Docker Hub: $BACKEND_BASE_IMAGE ..."
+    if timeout 120 docker pull "$BACKEND_BASE_IMAGE" 2>/dev/null; then
+      echo "Base image ready."
+    else
+      echo "Pull failed or timed out — will build locally if needed."
+    fi
+  fi
+
+  # Build thin app layers (backend + frontend) from base images, then start everything.
+  docker compose --profile "${COMPOSE_PROFILES:-cpu}" up --build backend frontend -d
+  docker compose --profile "${COMPOSE_PROFILES:-cpu}" up -d
+fi
+
+echo "Waiting for backend to initialize..."
+sleep 5
+if [[ "${GROWEBBY_ENGINE:-}" != "mac-opencl-native" ]]; then
+  docker compose exec backend python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@growebby.local', 'admin') if not User.objects.filter(username='admin').exists() else None" || true
 fi
 
 URL="http://localhost:5173"

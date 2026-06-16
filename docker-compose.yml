@@ -1,7 +1,13 @@
 services:
+  # ── Backend ────────────────────────────────────────────────────────────────
+  # Default profile: CPU (no GPU). Override BASE_IMAGE for cuda/metal profiles.
   backend:
+    image: ramsainanduri/growebby-backend:${GROWEBBY_VERSION:-latest}
+    pull_policy: missing
     build:
       context: ./backend
+      args:
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-ramsainanduri/growebby-base-backend-cuda:latest}
     environment:
       DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-local-gromacs-web-interface-key}"
       DJANGO_DEBUG: "${DJANGO_DEBUG:-0}"
@@ -17,26 +23,39 @@ services:
       GROWEBBY_ALLOW_VALIDATION_RUNS: "${GROWEBBY_ALLOW_VALIDATION_RUNS:-0}"
     ports:
       - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
     volumes:
-      - ./backend:/app
       - ./.app_state/media:/app/media
 
+  # ── Frontend ───────────────────────────────────────────────────────────────
   frontend:
+    image: ramsainanduri/growebby-frontend:${GROWEBBY_VERSION:-latest}
+    pull_policy: missing
     build:
       context: ./frontend
     environment:
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api}"
       VITE_BACKEND_PROXY_TARGET: "${VITE_BACKEND_PROXY_TARGET:-http://backend:8000}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-1}"
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - frontend-node-modules:/app/node_modules
 
+
+  # ── GROMACS Engine: CUDA (nvidia GPU) ─────────────────────────────────────
+  # Reuses growebby-base-backend-cuda which already has GROMACS compiled with CUDA.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-cuda Dockerfile).
   gromacs-cuda-engine:
-    build:
-      context: ./docker/gromacs
+    image: ramsainanduri/growebby-base-backend-cuda:${GROWEBBY_VERSION:-latest}
+    pull_policy: missing
     platform: linux/amd64
+    build:
+      context: ./docker/base-backend-cuda
     profiles: ["cuda"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     deploy:
@@ -49,17 +68,27 @@ services:
     volumes:
       - ./.app_state/media:/work
 
+  # ── GROMACS Engine: CPU (no GPU) ───────────────────────────────────────────
+  # Reuses growebby-base-backend-cpu which already has GROMACS CPU compiled.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-cpu Dockerfile).
   gromacs-cpu-engine:
+    image: ramsainanduri/growebby-base-backend-cpu:${GROWEBBY_VERSION:-latest}
+    pull_policy: missing
     build:
-      context: ./docker/gromacs-cpu
+      context: ./docker/base-backend-cpu
     profiles: ["cpu"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     volumes:
       - ./.app_state/media:/work
 
+  # ── GROMACS Engine: Metal / OpenCL (macOS GPU) ────────────────────────────
+  # Reuses growebby-base-backend-metal which already has GROMACS OpenCL compiled.
+  # Pulled from Docker Hub; built locally as fallback (via base-backend-metal Dockerfile).
   gromacs-metal-engine:
+    image: ramsainanduri/growebby-base-backend-metal:${GROWEBBY_VERSION:-latest}
+    pull_policy: missing
     build:
-      context: ./docker/gromacs-metal
+      context: ./docker/base-backend-metal
     profiles: ["metal"]
     command: ["bash", "-lc", "gmx --version && tail -f /dev/null"]
     volumes:
