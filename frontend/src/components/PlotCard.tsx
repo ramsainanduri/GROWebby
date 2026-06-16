@@ -213,8 +213,9 @@ export function PlotCard({
               label={{
                 value: xLabel,
                 position: "insideBottom",
-                offset: -25,
+                offset: -20,
                 fontSize: 12,
+                style: { textAnchor: "middle" },
               }}
             />
             <YAxis
@@ -224,8 +225,9 @@ export function PlotCard({
                 value: `${series.label} (${series.unit})`,
                 angle: -90,
                 position: "insideLeft",
-                offset: -45,
+                offset: -35,
                 fontSize: 12,
+                style: { textAnchor: "middle" },
               }}
             />
             <Tooltip
