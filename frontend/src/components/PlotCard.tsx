@@ -265,7 +265,7 @@ export function PlotCard({
         <select
           className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500 dark:border-slate-700 dark:bg-slate-800"
           value={exportBg}
-          onChange={(e) => setExportBg(e.target.value)}
+          onChange={(e: any) => setExportBg(e.target.value)}
           aria-label="Export background color"
         >
           <option value="transparent">Transparent Bg</option>
