@@ -31,7 +31,6 @@ services:
               count: all
               capabilities: ["gpu"]
     volumes:
-    volumes:
       - ./.app_state/media:/app/media
 
   # ── Frontend ───────────────────────────────────────────────────────────────
@@ -43,6 +42,7 @@ services:
     environment:
       VITE_API_BASE_URL: "${VITE_API_BASE_URL:-http://localhost:8000/api}"
       VITE_BACKEND_PROXY_TARGET: "${VITE_BACKEND_PROXY_TARGET:-http://backend:8000}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-1}"
     ports:
       - "5173:5173"
 

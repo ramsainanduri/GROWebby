@@ -15,4 +15,4 @@ RUN npm install
 COPY . .
 
 EXPOSE 5173
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "if [ \"$DJANGO_DEBUG\" = \"0\" ]; then npm run build && npm run preview; else npm run dev; fi"]

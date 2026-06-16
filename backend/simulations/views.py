@@ -569,20 +569,20 @@ def gromacs_options(_request: HttpRequest) -> JsonResponse:
 
 @csrf_exempt
 @require_POST
-def analyze_simulation(request: HttpRequest, pk: int) -> JsonResponse:
+def analyze_simulation(request: HttpRequest, job_id: int) -> JsonResponse:
     try:
         body = json.loads(request.body.decode("utf-8"))
         tool_name = body.get("tool")
         if not tool_name:
             return JsonResponse({"error": "No tool specified."}, status=400)
 
-        job = visible_jobs(request).get(pk=pk)
+        job = visible_jobs(request).get(pk=job_id)
         if job.status != SimulationJob.Status.COMPLETED:
             return JsonResponse({"error": "Analysis can only be run on completed jobs."}, status=400)
 
         from .runner import run_analysis
 
-        result = run_analysis(pk, tool_name)
+        result = run_analysis(job_id, tool_name)
         return JsonResponse(result)
     except SimulationJob.DoesNotExist:
         return JsonResponse({"error": "Job not found."}, status=404)
