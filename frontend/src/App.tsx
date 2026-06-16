@@ -168,7 +168,7 @@ function MainApp() {
     ]);
     window.setTimeout(
       () =>
-        setNotifications((current: any) => current.filter((item) => item.id !== id)),
+        setNotifications((current: any) => current.filter((item: any) => item.id !== id)),
       6000,
     );
   }
@@ -263,7 +263,7 @@ function MainApp() {
       }));
       setUploads((current: any) => [
         uploaded,
-        ...current.filter((item) => item.id !== uploaded.id),
+        ...current.filter((item: any) => item.id !== uploaded.id),
       ]);
       notify("success", `Uploaded ${uploaded.originalName}.`);
       navigate("/workflow");
@@ -308,7 +308,7 @@ function MainApp() {
       setUpload(example.upload);
       setUploads((current: any) => [
         example.upload,
-        ...current.filter((item) => item.id !== example.upload.id),
+        ...current.filter((item: any) => item.id !== example.upload.id),
       ]);
       setParameters({
         ...defaults,
@@ -332,7 +332,7 @@ function MainApp() {
     try {
       await deleteSimulation(runId);
       setRuns((current: any) =>
-        current.filter((run) => (run.runGroupId ?? run.id) !== groupId),
+        current.filter((run: any) => (run.runGroupId ?? run.id) !== groupId),
       );
       if (job && (job.runGroupId ?? job.id) === groupId) {
         setJob(null);
@@ -352,7 +352,7 @@ function MainApp() {
       setJob((current: any) => (current?.id === runId ? renamed : current));
       setRuns((current: any) =>
         upsertRun(
-          current.map((run) =>
+          current.map((run: any) =>
             (run.runGroupId ?? run.id) === renamed.runGroupId
               ? {
                   ...run,
@@ -714,7 +714,7 @@ function MainApp() {
         notifications={notifications}
         dismiss={(id) =>
           setNotifications((current: any) =>
-            current.filter((item) => item.id !== id),
+            current.filter((item: any) => item.id !== id),
           )
         }
       />
